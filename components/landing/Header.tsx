@@ -26,7 +26,7 @@ export default function Header() {
 
   return (
     <header className={`fixed top-0 w-full z-50 transition-all duration-300 ${
-      scrolled || mobileMenuOpen ? 'bg-white/95 backdrop-blur-md shadow-sm' : 'bg-white/80 backdrop-blur-sm'
+      scrolled || mobileMenuOpen ? 'bg-slate-950/95 backdrop-blur-md shadow-sm shadow-black/20' : 'bg-slate-950/70 backdrop-blur-sm'
     }`}>
       <nav className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
@@ -46,7 +46,7 @@ export default function Header() {
               <a
                 key={item.name}
                 href={item.href}
-                className="text-gray-700 hover:text-blue-600 transition"
+                className="text-slate-200 transition hover:text-blue-300"
               >
                 {item.name}
               </a>
@@ -57,13 +57,13 @@ export default function Header() {
           <div className="hidden md:flex items-center space-x-4">
             <Link
               href="/login"
-              className="px-4 py-2 text-gray-700 hover:text-blue-600 transition"
+              className="px-4 py-2 text-slate-200 transition hover:text-blue-300"
             >
               Sign In
             </Link>
             <Link
               href="/register"
-              className="px-5 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition shadow-sm"
+              className="px-5 py-2 bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-lg font-medium hover:from-blue-400 hover:to-purple-400 transition shadow-sm"
             >
               Get Started
             </Link>
@@ -72,7 +72,7 @@ export default function Header() {
           {/* Mobile menu button */}
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="md:hidden p-2 rounded-lg text-gray-600 hover:bg-gray-100 transition"
+            className="md:hidden p-2 rounded-lg text-slate-200 transition hover:bg-white/10"
             aria-label="Toggle navigation menu"
           >
             {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
@@ -81,14 +81,14 @@ export default function Header() {
 
         {/* Mobile Navigation */}
         {mobileMenuOpen && (
-          <div className="md:hidden py-4 border-t border-gray-100">
+          <div className="md:hidden py-4 border-t border-white/10">
             <div className="flex flex-col space-y-3">
               {navigation.map((item) => (
                 <a
                   key={item.name}
                   href={item.href}
                   onClick={() => setMobileMenuOpen(false)}
-                  className="text-gray-700 hover:text-blue-600 transition py-2"
+                  className="py-2 text-slate-200 transition hover:text-blue-300"
                 >
                   {item.name}
                 </a>
@@ -97,14 +97,14 @@ export default function Header() {
                 <Link
                   href="/login"
                   onClick={() => setMobileMenuOpen(false)}
-                  className="text-center px-4 py-2 text-gray-700 hover:text-blue-600 transition"
+                  className="text-center px-4 py-2 text-slate-200 transition hover:text-blue-300"
                 >
                   Sign In
                 </Link>
                 <Link
                   href="/register"
                   onClick={() => setMobileMenuOpen(false)}
-                  className="text-center px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-medium"
+                  className="text-center px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-lg font-medium"
                 >
                   Get Started
                 </Link>

@@ -25,23 +25,24 @@ const recommendedJobs = [
 
 export default function Hero() {
   return (
-    <section className="relative overflow-hidden bg-gradient-to-br from-sky-50 via-white to-violet-50 pt-24 pb-14 sm:pt-28 sm:pb-20 lg:pt-32">
+    <section className="relative overflow-hidden bg-gradient-to-br from-slate-950 via-blue-950 to-purple-950 pt-24 pb-14 sm:pt-28 sm:pb-20 lg:pt-32">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.24),transparent_34%),radial-gradient(circle_at_top_right,rgba(147,51,234,0.22),transparent_32%)]" />
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-4xl text-center">
-          <div className="mb-6 inline-flex items-center rounded-full bg-blue-100 px-3 py-1 text-sm font-medium text-blue-700">
+        <div className="relative mx-auto max-w-4xl text-center">
+          <div className="mb-6 inline-flex items-center rounded-full border border-white/15 bg-white/10 px-3 py-1 text-sm font-medium text-blue-100 shadow-sm backdrop-blur">
             <span className="mr-2 flex h-2 w-2 rounded-full bg-blue-600" />
             Join 10,000+ job seekers
           </div>
 
-          <h1 className="mb-6 text-4xl font-bold leading-tight text-gray-900 sm:text-5xl lg:text-6xl">
+          <h1 className="mb-6 text-4xl font-bold leading-tight text-white sm:text-5xl lg:text-6xl">
             Find Your{' '}
-            <span className="bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+            <span className="bg-gradient-to-r from-blue-300 to-purple-300 bg-clip-text text-transparent">
               Dream Career
             </span>{' '}
             Faster
           </h1>
 
-          <p className="mx-auto mb-8 max-w-2xl text-base leading-7 text-gray-600 sm:text-xl sm:leading-8">
+          <p className="mx-auto mb-8 max-w-2xl text-base leading-7 text-slate-300 sm:text-xl sm:leading-8">
             CareerConnect connects talented professionals with leading
             companies. Apply to thousands of jobs, track applications, and land
             your next role.
@@ -50,21 +51,21 @@ export default function Hero() {
           <div className="mb-10 flex flex-col justify-center gap-4 sm:flex-row">
             <Link
               href="/register"
-              className="inline-flex items-center justify-center rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 px-6 py-3 font-semibold text-white shadow-lg transition-all hover:from-blue-700 hover:to-purple-700"
+              className="inline-flex items-center justify-center rounded-lg bg-gradient-to-r from-blue-500 to-purple-500 px-6 py-3 font-semibold text-white shadow-lg transition-all hover:from-blue-400 hover:to-purple-400"
             >
               Get Started Free
               <ArrowRight className="ml-2 h-5 w-5" />
             </Link>
             <Link
               href="#how-it-works"
-              className="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white/80 px-6 py-3 font-semibold text-gray-700 transition hover:bg-white"
+              className="inline-flex items-center justify-center rounded-lg border border-white/20 bg-white/10 px-6 py-3 font-semibold text-white transition hover:bg-white/15"
             >
               <Play className="mr-2 h-5 w-5" />
               How It Works
             </Link>
           </div>
 
-          <div className="flex flex-col justify-center gap-3 text-sm text-gray-500 sm:flex-row sm:flex-wrap sm:gap-6">
+          <div className="flex flex-col justify-center gap-3 text-sm text-slate-300 sm:flex-row sm:flex-wrap sm:gap-6">
             {highlights.map((item) => (
               <div key={item} className="flex items-center justify-center">
                 <CheckCircle className="mr-1 h-4 w-4 text-green-500" />
@@ -74,7 +75,7 @@ export default function Hero() {
           </div>
         </div>
 
-        <div className="mt-12 sm:mt-16">
+        <div className="relative mt-12 sm:mt-16">
           <div className="mx-auto max-w-6xl overflow-hidden rounded-lg border border-gray-200 bg-white shadow-2xl">
             <div className="flex items-center gap-2 border-b border-gray-100 bg-gray-50 px-4 py-3">
               <span className="h-3 w-3 rounded-full bg-red-400" />
