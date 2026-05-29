@@ -45,6 +45,8 @@ CREATE TABLE IF NOT EXISTS candidate_profiles (
     resume_url TEXT,
     profile_picture TEXT,
     years_experience INTEGER DEFAULT 0,
+    education TEXT,
+    work_experience JSONB,
     current_job_title VARCHAR(255),
     current_company VARCHAR(255),
     linkedin_url VARCHAR(255),

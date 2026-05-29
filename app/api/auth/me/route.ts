@@ -49,7 +49,8 @@ export async function GET(request: NextRequest) {
       const profileResult = await query(
         `SELECT first_name, last_name, phone, location, headline, summary, 
                 resume_url, profile_picture, years_experience, current_job_title, 
-                current_company, linkedin_url, github_url, portfolio_url
+                current_company, linkedin_url, github_url, portfolio_url,
+                education, work_experience
          FROM candidate_profiles 
          WHERE user_id = $1`,
         [user.id]

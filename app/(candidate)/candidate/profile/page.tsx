@@ -46,13 +46,32 @@ export default function CandidateProfilePage() {
     location: '',
     headline: '',
     summary: '',
-    yearsExperience: '',
+    yearsExperience: '' as string | number,
     education: '',
+    currentJobTitle: '',
+    currentCompany: '',
+    linkedinUrl: '',
+    githubUrl: '',
+    portfolioUrl: '',
+    profilePicture: '',
   });
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const [skills, setSkills] = useState<Skill[]>([]);
 
   const [experiences, setExperiences] = useState<Experience[]>([]);
+  const [showAddExperience, setShowAddExperience] = useState(false);
+  const [newExperience, setNewExperience] = useState<Experience>({
+    id: Date.now(),
+    title: '',
+    company: '',
+    location: '',
+    startDate: '',
+    endDate: '',
+    current: false,
+    description: '',
+  });
 
   const [newSkill, setNewSkill] = useState('');
   const [newSkillLevel, setNewSkillLevel] = useState<Skill['level']>('Intermediate');
@@ -66,19 +85,119 @@ export default function CandidateProfilePage() {
       firstName: profile?.first_name || '',
       lastName: profile?.last_name || '',
       email: user?.email || '',
+      phone: profile?.phone || '',
       location: profile?.location || '',
       headline: profile?.headline || '',
+      summary: profile?.summary || '',
+      yearsExperience: profile?.years_experience ?? '',
+      education: profile?.education || '',
+      currentJobTitle: profile?.current_job_title || '',
+      currentCompany: profile?.current_company || '',
+      linkedinUrl: profile?.linkedin_url || '',
+      githubUrl: profile?.github_url || '',
+      portfolioUrl: profile?.portfolio_url || '',
+      profilePicture: profile?.profile_picture || '',
     }));
+
+    const profileWork = profile?.work_experience;
+    if (Array.isArray(profileWork)) {
+      setExperiences(profileWork);
+    } else if (typeof profileWork === 'string') {
+      try {
+        const parsed = JSON.parse(profileWork);
+        if (Array.isArray(parsed)) setExperiences(parsed);
+        else setExperiences([]);
+      } catch (err) {
+        setExperiences([]);
+      }
+    } else {
+      setExperiences([]);
+    }
   }, [profile, user]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    setFormData({
+      ...formData,
+      [name]: name === 'yearsExperience' ? (value === '' ? '' : Number(value)) : value,
+    });
   };
 
-  const handleSave = () => {
-    setIsEditing(false);
-    // Save to API would go here
-    alert('Profile saved successfully!');
+  const handleSave = async () => {
+    setSaveError(null);
+    setIsSaving(true);
+
+    try {
+      const response = await fetch('/api/candidate/profile', {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          first_name: formData.firstName,
+          last_name: formData.lastName,
+          phone: formData.phone,
+          location: formData.location,
+          headline: formData.headline,
+          summary: formData.summary,
+          years_experience: typeof formData.yearsExperience === 'number' && !Number.isNaN(formData.yearsExperience)
+            ? formData.yearsExperience
+            : null,
+          current_job_title: formData.currentJobTitle,
+          current_company: formData.currentCompany,
+          linkedin_url: formData.linkedinUrl,
+          github_url: formData.githubUrl,
+          portfolio_url: formData.portfolioUrl,
+          education: formData.education,
+          work_experience: experiences,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        setSaveError(result.message || 'Unable to save profile. Please try again.');
+        return;
+      }
+
+      setFormData((current) => ({
+        ...current,
+        firstName: result.data.first_name || current.firstName,
+        lastName: result.data.last_name || current.lastName,
+        phone: result.data.phone || current.phone,
+        location: result.data.location || current.location,
+        headline: result.data.headline || current.headline,
+        summary: result.data.summary || current.summary,
+        yearsExperience: result.data.years_experience ?? current.yearsExperience,
+        education: result.data.education ?? current.education,
+        currentJobTitle: result.data.current_job_title || current.currentJobTitle,
+        currentCompany: result.data.current_company || current.currentCompany,
+        linkedinUrl: result.data.linkedin_url || current.linkedinUrl,
+        githubUrl: result.data.github_url || current.githubUrl,
+        portfolioUrl: result.data.portfolio_url || current.portfolioUrl,
+        profilePicture: result.data.profile_picture || current.profilePicture,
+      }));
+
+      // Ensure experiences is always an array (API may return null, string, or array)
+      const savedWork = result.data.work_experience;
+      if (Array.isArray(savedWork)) {
+        setExperiences(savedWork);
+      } else if (typeof savedWork === 'string') {
+        try {
+          const parsed = JSON.parse(savedWork);
+          if (Array.isArray(parsed)) setExperiences(parsed);
+        } catch (err) {
+          // leave existing experiences unchanged
+        }
+      }
+
+      setIsEditing(false);
+      alert('Profile saved successfully!');
+    } catch (error) {
+      setSaveError('Unable to save profile. Please try again.');
+      console.error('Profile save error:', error);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleAddSkill = () => {
@@ -93,6 +212,40 @@ export default function CandidateProfilePage() {
     setSkills(skills.filter(s => s.id !== id));
   };
 
+  const handleProfilePictureChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    try {
+      const formDataPayload = new FormData();
+      formDataPayload.append('profile_picture', file);
+
+      const response = await fetch('/api/candidate/profile/photo', {
+        method: 'POST',
+        body: formDataPayload,
+        credentials: 'include',
+      });
+
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        setSaveError(result.message || 'Unable to upload profile picture.');
+        return;
+      }
+
+      setFormData((current) => ({
+        ...current,
+        profilePicture: result.data.profile_picture,
+      }));
+      alert('Profile picture uploaded successfully!');
+    } catch (error) {
+      setSaveError('Unable to upload profile picture. Please try again.');
+      console.error('Profile picture upload error:', error);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -104,6 +257,33 @@ export default function CandidateProfilePage() {
         alert('Resume uploaded successfully!');
       }, 1500);
     }
+  };
+
+  const handleAddExperience = () => {
+    if (!newExperience.title || !newExperience.company) {
+      setSaveError('Please provide a title and company for experience.');
+      return;
+    }
+
+    setExperiences([...experiences, { ...newExperience, id: Date.now() }]);
+    setNewExperience({
+      id: Date.now(),
+      title: '',
+      company: '',
+      location: '',
+      startDate: '',
+      endDate: '',
+      current: false,
+      description: '',
+    });
+    setShowAddExperience(false);
+  };
+
+  const handleExperienceChange = (field: keyof Experience, value: string | boolean) => {
+    setNewExperience((current) => ({
+      ...current,
+      [field]: value,
+    }));
   };
 
   const profileStrength = (skills.length * 5) + (experiences.length * 10) + (formData.summary.length > 100 ? 20 : 10);
@@ -208,6 +388,28 @@ export default function CandidateProfilePage() {
                 </div>
               </div>
               <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Current Job Title</label>
+                <input
+                  name="currentJobTitle"
+                  value={formData.currentJobTitle}
+                  onChange={handleInputChange}
+                  disabled={!isEditing}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 dark:disabled:bg-gray-700"
+                  placeholder="e.g., Product Designer"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Current Company</label>
+                <input
+                  name="currentCompany"
+                  value={formData.currentCompany}
+                  onChange={handleInputChange}
+                  disabled={!isEditing}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 dark:disabled:bg-gray-700"
+                  placeholder="e.g., Acme Corp"
+                />
+              </div>
+              <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Years of Experience</label>
                 <select
                   name="yearsExperience"
@@ -216,12 +418,13 @@ export default function CandidateProfilePage() {
                   disabled={!isEditing}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 dark:disabled:bg-gray-700"
                 >
-                  <option>0-1</option>
-                  <option>1-3</option>
-                  <option>3-5</option>
-                  <option>5-7</option>
-                  <option>7-10</option>
-                  <option>10+</option>
+                  <option value="">Select experience</option>
+                  <option value="0">0-1</option>
+                  <option value="1">1-3</option>
+                  <option value="3">3-5</option>
+                  <option value="5">5-7</option>
+                  <option value="7">7-10</option>
+                  <option value="10">10+</option>
                 </select>
               </div>
             </div>
@@ -254,6 +457,41 @@ export default function CandidateProfilePage() {
                   placeholder="Tell employers about yourself, your experience, and what you're looking for..."
                 />
               </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">LinkedIn URL</label>
+                  <input
+                    name="linkedinUrl"
+                    value={formData.linkedinUrl}
+                    onChange={handleInputChange}
+                    disabled={!isEditing}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 dark:disabled:bg-gray-700"
+                    placeholder="https://linkedin.com/in/yourname"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">GitHub URL</label>
+                  <input
+                    name="githubUrl"
+                    value={formData.githubUrl}
+                    onChange={handleInputChange}
+                    disabled={!isEditing}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 dark:disabled:bg-gray-700"
+                    placeholder="https://github.com/yourname"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Portfolio URL</label>
+                  <input
+                    name="portfolioUrl"
+                    value={formData.portfolioUrl}
+                    onChange={handleInputChange}
+                    disabled={!isEditing}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 dark:disabled:bg-gray-700"
+                    placeholder="https://yourportfolio.com"
+                  />
+                </div>
+              </div>
             </div>
           </div>
 
@@ -262,7 +500,10 @@ export default function CandidateProfilePage() {
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Work Experience</h2>
               {isEditing && (
-                <button className="flex items-center space-x-1 text-sm text-blue-600 hover:text-blue-700">
+                <button
+                  onClick={() => setShowAddExperience(true)}
+                  className="flex items-center space-x-1 text-sm text-blue-600 hover:text-blue-700"
+                >
                   <Plus className="h-4 w-4" />
                   <span>Add Experience</span>
                 </button>
@@ -294,6 +535,36 @@ export default function CandidateProfilePage() {
 
         {/* Right Sidebar */}
         <div className="space-y-6">
+          {/* Profile Picture */}
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Profile Picture</h2>
+            <div className="flex flex-col items-center space-y-4">
+              {formData.profilePicture ? (
+                <img
+                  src={formData.profilePicture}
+                  alt="Profile"
+                  className="w-28 h-28 rounded-full object-cover border border-gray-200 dark:border-gray-700"
+                />
+              ) : (
+                <div className="w-28 h-28 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-gray-500">
+                  <User className="h-10 w-10" />
+                </div>
+              )}
+              {isEditing && (
+                <label className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium cursor-pointer hover:bg-blue-700 transition">
+                  {isUploading ? 'Uploading...' : 'Upload Photo'}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleProfilePictureChange}
+                    className="hidden"
+                    disabled={isUploading}
+                  />
+                </label>
+              )}
+            </div>
+          </div>
+
           {/* Resume Upload */}
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Resume</h2>
@@ -345,16 +616,18 @@ export default function CandidateProfilePage() {
             </div>
           </div>
 
-          {/* Education */}
+          {/* Education & Links */}
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Education</h2>
-            <div className="flex items-start space-x-3">
-              <GraduationCap className="h-5 w-5 text-gray-400 mt-0.5" />
-              <div>
-                <p className="font-medium text-gray-900 dark:text-white">{formData.education}</p>
-                <p className="text-xs text-gray-500 mt-1">2013 - 2017</p>
-              </div>
-            </div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">School / Program</label>
+            <input
+              name="education"
+              value={formData.education}
+              onChange={handleInputChange}
+              disabled={!isEditing}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 dark:disabled:bg-gray-700"
+              placeholder="e.g., B.S. in Computer Science, University of XYZ"
+            />
           </div>
         </div>
       </div>
@@ -399,6 +672,110 @@ export default function CandidateProfilePage() {
                   className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                 >
                   Add Skill
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAddExperience && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50">
+          <div className="bg-white dark:bg-gray-800 rounded-xl max-w-lg w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white">Add Experience</h3>
+              <button
+                onClick={() => setShowAddExperience(false)}
+                className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+              >
+                Close
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Job Title</label>
+                <input
+                  value={newExperience.title}
+                  onChange={(e) => handleExperienceChange('title', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="e.g., Senior Frontend Developer"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Company</label>
+                <input
+                  value={newExperience.company}
+                  onChange={(e) => handleExperienceChange('company', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="e.g., Acme Corp"
+                />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Location</label>
+                  <input
+                    value={newExperience.location}
+                    onChange={(e) => handleExperienceChange('location', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="City, Country"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Current Role</label>
+                  <select
+                    value={newExperience.current ? 'yes' : 'no'}
+                    onChange={(e) => handleExperienceChange('current', e.target.value === 'yes')}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="no">No</option>
+                    <option value="yes">Yes</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Start Date</label>
+                  <input
+                    type="month"
+                    value={newExperience.startDate}
+                    onChange={(e) => handleExperienceChange('startDate', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                {!newExperience.current && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">End Date</label>
+                    <input
+                      type="month"
+                      value={newExperience.endDate}
+                      onChange={(e) => handleExperienceChange('endDate', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
+                <textarea
+                  value={newExperience.description}
+                  onChange={(e) => handleExperienceChange('description', e.target.value)}
+                  rows={4}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="Describe your responsibilities and achievements"
+                />
+              </div>
+              <div className="flex space-x-3 pt-4">
+                <button
+                  onClick={() => setShowAddExperience(false)}
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleAddExperience}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                >
+                  Add Experience
                 </button>
               </div>
             </div>

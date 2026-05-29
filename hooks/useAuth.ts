@@ -16,8 +16,20 @@ interface AuthUser {
 interface AuthProfile {
   first_name?: string;
   last_name?: string;
-  headline?: string;
+  phone?: string;
   location?: string;
+  headline?: string;
+  summary?: string;
+  resume_url?: string;
+  profile_picture?: string;
+  years_experience?: number;
+  current_job_title?: string;
+  current_company?: string;
+  linkedin_url?: string;
+  github_url?: string;
+  portfolio_url?: string;
+  education?: string;
+  work_experience?: any;
   department?: string;
   position?: string;
 }

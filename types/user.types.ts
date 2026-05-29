@@ -22,6 +22,8 @@ export interface CandidateProfile {
   resume_url: string;
   profile_picture: string;
   years_experience: number;
+  education?: string;
+  work_experience?: any;
   created_at: Date;
   updated_at: Date;
 }

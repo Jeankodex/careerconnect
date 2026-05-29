@@ -54,6 +54,7 @@ export async function GET(request: NextRequest) {
       `SELECT first_name, last_name, phone, location, headline, summary, 
               resume_url, profile_picture, years_experience, current_job_title, 
               current_company, linkedin_url, github_url, portfolio_url,
+              education, work_experience,
               created_at as profile_created_at, updated_at as profile_updated_at
        FROM candidate_profiles 
        WHERE user_id = $1`,
@@ -150,8 +151,57 @@ export async function PUT(request: NextRequest) {
       linkedin_url,
       github_url,
       portfolio_url,
+      education,
+      work_experience,
     } = body;
     
+    const parsedYearsExperience = years_experience === null || years_experience === undefined
+      ? null
+      : Number(years_experience);
+    const safeYearsExperience = Number.isFinite(parsedYearsExperience)
+      ? parsedYearsExperience
+      : null;
+
+    const normalizeWorkExperience = (value: unknown) => {
+      if (Array.isArray(value)) {
+        return value.map((item) => {
+          if (typeof item === 'string') {
+            try {
+              return JSON.parse(item);
+            } catch {
+              return item;
+            }
+          }
+          return item;
+        });
+      }
+
+      if (typeof value === 'string') {
+        try {
+          const parsed = JSON.parse(value);
+          if (Array.isArray(parsed)) {
+            return parsed.map((item) => {
+              if (typeof item === 'string') {
+                try {
+                  return JSON.parse(item);
+                } catch {
+                  return item;
+                }
+              }
+              return item;
+            });
+          }
+        } catch {
+          return null;
+        }
+      }
+
+      return null;
+    };
+
+    const safeWorkExperience = normalizeWorkExperience(work_experience);
+    const workExperienceJson = safeWorkExperience !== null ? JSON.stringify(safeWorkExperience) : null;
+
     const userId = payload.userId;
     
     // Step 3: Check if profile exists
@@ -169,12 +219,13 @@ export async function PUT(request: NextRequest) {
              headline = $5, summary = $6, years_experience = $7, 
              current_job_title = $8, current_company = $9, 
              linkedin_url = $10, github_url = $11, portfolio_url = $12,
+             education = $13, work_experience = $14,
              updated_at = CURRENT_TIMESTAMP
-         WHERE user_id = $13`,
+         WHERE user_id = $15`,
         [
           first_name, last_name, phone, location, headline, summary, 
-          years_experience, current_job_title, current_company,
-          linkedin_url, github_url, portfolio_url, userId
+          safeYearsExperience, current_job_title, current_company,
+          linkedin_url, github_url, portfolio_url, education, workExperienceJson, userId
         ]
       );
     } else {
@@ -183,12 +234,12 @@ export async function PUT(request: NextRequest) {
         `INSERT INTO candidate_profiles 
          (user_id, first_name, last_name, phone, location, headline, summary, 
           years_experience, current_job_title, current_company, 
-          linkedin_url, github_url, portfolio_url)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+          linkedin_url, github_url, portfolio_url, education, work_experience)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
         [
           userId, first_name, last_name, phone, location, headline, summary,
-          years_experience, current_job_title, current_company,
-          linkedin_url, github_url, portfolio_url
+          safeYearsExperience, current_job_title, current_company,
+          linkedin_url, github_url, portfolio_url, education, workExperienceJson
         ]
       );
     }
@@ -196,8 +247,8 @@ export async function PUT(request: NextRequest) {
     // Step 5: Fetch updated profile
     const updatedProfile = await query(
       `SELECT first_name, last_name, phone, location, headline, summary, 
-              years_experience, current_job_title, current_company, 
-              linkedin_url, github_url, portfolio_url, updated_at
+              resume_url, profile_picture, years_experience, current_job_title, 
+              current_company, linkedin_url, github_url, portfolio_url, education, work_experience, updated_at
        FROM candidate_profiles WHERE user_id = $1`,
       [userId]
     );

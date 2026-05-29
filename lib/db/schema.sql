@@ -23,6 +23,8 @@ CREATE TABLE IF NOT EXISTS candidate_profiles (
     resume_url TEXT,
     profile_picture TEXT,
     years_experience INTEGER,
+    education TEXT,
+    work_experience JSONB,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
