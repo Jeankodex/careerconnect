@@ -36,7 +36,7 @@ interface Experience {
 }
 
 export default function CandidateProfilePage() {
-  const { user, profile } = useAuth('candidate');
+  const { user, profile, isLoading: authLoading } = useAuth('candidate');
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({
     firstName: '',
@@ -59,6 +59,11 @@ export default function CandidateProfilePage() {
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const [skills, setSkills] = useState<Skill[]>([]);
+  const [resumeUrl, setResumeUrl] = useState('');
+  const [resumeFileName, setResumeFileName] = useState('');
+  const [profilePicturePreview, setProfilePicturePreview] = useState('');
+  const [pendingProfilePictureFile, setPendingProfilePictureFile] = useState<File | null>(null);
+  const [isProfileLoading, setIsProfileLoading] = useState(true);
 
   const [experiences, setExperiences] = useState<Experience[]>([]);
   const [showAddExperience, setShowAddExperience] = useState(false);
@@ -80,40 +85,91 @@ export default function CandidateProfilePage() {
   const [isUploading, setIsUploading] = useState(false);
 
   useEffect(() => {
-    setFormData((current) => ({
-      ...current,
-      firstName: profile?.first_name || '',
-      lastName: profile?.last_name || '',
-      email: user?.email || '',
-      phone: profile?.phone || '',
-      location: profile?.location || '',
-      headline: profile?.headline || '',
-      summary: profile?.summary || '',
-      yearsExperience: profile?.years_experience ?? '',
-      education: profile?.education || '',
-      currentJobTitle: profile?.current_job_title || '',
-      currentCompany: profile?.current_company || '',
-      linkedinUrl: profile?.linkedin_url || '',
-      githubUrl: profile?.github_url || '',
-      portfolioUrl: profile?.portfolio_url || '',
-      profilePicture: profile?.profile_picture || '',
-    }));
-
-    const profileWork = profile?.work_experience;
-    if (Array.isArray(profileWork)) {
-      setExperiences(profileWork);
-    } else if (typeof profileWork === 'string') {
-      try {
-        const parsed = JSON.parse(profileWork);
-        if (Array.isArray(parsed)) setExperiences(parsed);
-        else setExperiences([]);
-      } catch (err) {
-        setExperiences([]);
+    const mapSkillLevel = (value: unknown): Skill['level'] => {
+      if (typeof value === 'number') {
+        if (value <= 1) return 'Beginner';
+        if (value === 2) return 'Intermediate';
+        if (value === 3) return 'Advanced';
+        return 'Expert';
       }
-    } else {
-      setExperiences([]);
+      if (typeof value === 'string') {
+        const normalized = value.toLowerCase();
+        if (normalized.includes('beginner')) return 'Beginner';
+        if (normalized.includes('intermediate')) return 'Intermediate';
+        if (normalized.includes('advanced')) return 'Advanced';
+        if (normalized.includes('expert')) return 'Expert';
+      }
+      return 'Intermediate';
+    };
+
+    const loadCandidateProfile = async () => {
+      if (!user) return;
+      setIsProfileLoading(true);
+      setSaveError(null);
+
+      try {
+        const response = await fetch('/api/candidate/profile', { cache: 'no-store' });
+        const result = await response.json();
+
+        if (!response.ok || !result.success) {
+          return;
+        }
+
+        const profileData = result.data.profile || {};
+
+        setFormData({
+          firstName: profileData.first_name || '',
+          lastName: profileData.last_name || '',
+          email: user.email || '',
+          phone: profileData.phone || '',
+          location: profileData.location || '',
+          headline: profileData.headline || '',
+          summary: profileData.summary || '',
+          yearsExperience: profileData.years_experience ?? '',
+          education: profileData.education || '',
+          currentJobTitle: profileData.current_job_title || '',
+          currentCompany: profileData.current_company || '',
+          linkedinUrl: profileData.linkedin_url || '',
+          githubUrl: profileData.github_url || '',
+          portfolioUrl: profileData.portfolio_url || '',
+          profilePicture: profileData.profile_picture || '',
+        });
+
+        setExperiences(() => {
+          const work = profileData.work_experience;
+          if (Array.isArray(work)) return work;
+          if (typeof work === 'string') {
+            try {
+              const parsed = JSON.parse(work);
+              return Array.isArray(parsed) ? parsed : [];
+            } catch {
+              return [];
+            }
+          }
+          return [];
+        });
+
+        setSkills(Array.isArray(result.data.skills)
+          ? result.data.skills.map((skill: any) => ({
+              id: skill.id,
+              name: skill.name,
+              level: mapSkillLevel(skill.proficiency_level),
+            }))
+          : []);
+
+        setResumeUrl(profileData.resume_url || '');
+        setResumeFileName(profileData.resume_url ? profileData.resume_url.split('/').pop() || '' : '');
+      } catch (error) {
+        console.error('Failed to load candidate profile:', error);
+      } finally {
+        setIsProfileLoading(false);
+      }
+    };
+
+    if (!authLoading) {
+      loadCandidateProfile();
     }
-  }, [profile, user]);
+  }, [user, authLoading]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -128,6 +184,19 @@ export default function CandidateProfilePage() {
     setIsSaving(true);
 
     try {
+      if (pendingProfilePictureFile) {
+        const uploadedUrl = await uploadProfilePicture(pendingProfilePictureFile);
+        setFormData((current) => ({
+          ...current,
+          profilePicture: uploadedUrl,
+        }));
+        if (profilePicturePreview) {
+          URL.revokeObjectURL(profilePicturePreview);
+        }
+        setProfilePicturePreview('');
+        setPendingProfilePictureFile(null);
+      }
+
       const response = await fetch('/api/candidate/profile', {
         method: 'PUT',
         credentials: 'include',
@@ -149,6 +218,11 @@ export default function CandidateProfilePage() {
           portfolio_url: formData.portfolioUrl,
           education: formData.education,
           work_experience: experiences,
+          skills: skills.map((skill) => ({
+            id: skill.id,
+            name: skill.name,
+            level: skill.level,
+          })),
         }),
       });
 
@@ -161,33 +235,63 @@ export default function CandidateProfilePage() {
 
       setFormData((current) => ({
         ...current,
-        firstName: result.data.first_name || current.firstName,
-        lastName: result.data.last_name || current.lastName,
-        phone: result.data.phone || current.phone,
-        location: result.data.location || current.location,
-        headline: result.data.headline || current.headline,
-        summary: result.data.summary || current.summary,
-        yearsExperience: result.data.years_experience ?? current.yearsExperience,
-        education: result.data.education ?? current.education,
-        currentJobTitle: result.data.current_job_title || current.currentJobTitle,
-        currentCompany: result.data.current_company || current.currentCompany,
-        linkedinUrl: result.data.linkedin_url || current.linkedinUrl,
-        githubUrl: result.data.github_url || current.githubUrl,
-        portfolioUrl: result.data.portfolio_url || current.portfolioUrl,
-        profilePicture: result.data.profile_picture || current.profilePicture,
+        firstName: result.data.profile?.first_name || current.firstName,
+        lastName: result.data.profile?.last_name || current.lastName,
+        phone: result.data.profile?.phone || current.phone,
+        location: result.data.profile?.location || current.location,
+        headline: result.data.profile?.headline || current.headline,
+        summary: result.data.profile?.summary || current.summary,
+        yearsExperience: result.data.profile?.years_experience ?? current.yearsExperience,
+        education: result.data.profile?.education ?? current.education,
+        currentJobTitle: result.data.profile?.current_job_title || current.currentJobTitle,
+        currentCompany: result.data.profile?.current_company || current.currentCompany,
+        linkedinUrl: result.data.profile?.linkedin_url || current.linkedinUrl,
+        githubUrl: result.data.profile?.github_url || current.githubUrl,
+        portfolioUrl: result.data.profile?.portfolio_url || current.portfolioUrl,
+        profilePicture: result.data.profile?.profile_picture || current.profilePicture,
       }));
 
       // Ensure experiences is always an array (API may return null, string, or array)
-      const savedWork = result.data.work_experience;
+      const savedWork = result.data.profile?.work_experience;
       if (Array.isArray(savedWork)) {
         setExperiences(savedWork);
       } else if (typeof savedWork === 'string') {
         try {
           const parsed = JSON.parse(savedWork);
           if (Array.isArray(parsed)) setExperiences(parsed);
-        } catch (err) {
+        } catch {
           // leave existing experiences unchanged
         }
+      }
+
+      if (Array.isArray(result.data.skills)) {
+        const mapSkillLevel = (value: unknown): Skill['level'] => {
+          if (typeof value === 'number') {
+            if (value <= 1) return 'Beginner';
+            if (value === 2) return 'Intermediate';
+            if (value === 3) return 'Advanced';
+            return 'Expert';
+          }
+          if (typeof value === 'string') {
+            const normalized = value.toLowerCase();
+            if (normalized.includes('beginner')) return 'Beginner';
+            if (normalized.includes('intermediate')) return 'Intermediate';
+            if (normalized.includes('advanced')) return 'Advanced';
+            if (normalized.includes('expert')) return 'Expert';
+          }
+          return 'Intermediate';
+        };
+
+        setSkills(result.data.skills.map((skill: any) => ({
+          id: skill.id,
+          name: skill.name,
+          level: mapSkillLevel(skill.proficiency_level || skill.level),
+        })));
+      }
+
+      if (result.data.profile?.resume_url) {
+        setResumeUrl(result.data.profile.resume_url);
+        setResumeFileName(result.data.profile.resume_url.split('/').pop() || '');
       }
 
       setIsEditing(false);
@@ -212,16 +316,61 @@ export default function CandidateProfilePage() {
     setSkills(skills.filter(s => s.id !== id));
   };
 
-  const handleProfilePictureChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleRemoveExperience = (id: number) => {
+    setExperiences(experiences.filter((exp) => exp.id !== id));
+  };
+
+  const handleProfilePictureChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (profilePicturePreview) {
+      URL.revokeObjectURL(profilePicturePreview);
+    }
+
+    const previewUrl = URL.createObjectURL(file);
+    setProfilePicturePreview(previewUrl);
+    setPendingProfilePictureFile(file);
+  };
+
+  const cancelProfilePicturePreview = () => {
+    if (profilePicturePreview) {
+      URL.revokeObjectURL(profilePicturePreview);
+    }
+    setProfilePicturePreview('');
+    setPendingProfilePictureFile(null);
+  };
+
+  const uploadProfilePicture = async (file: File) => {
+    const payload = new FormData();
+    payload.append('profile_picture', file);
+
+    const response = await fetch('/api/candidate/profile/photo', {
+      method: 'POST',
+      body: payload,
+      credentials: 'include',
+    });
+
+    const result = await response.json();
+    if (!response.ok || !result.success) {
+      throw new Error(result.message || 'Unable to upload profile picture.');
+    }
+
+    return result.data.profile_picture;
+  };
+
+  const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setIsUploading(true);
+    setSaveError(null);
+
     try {
       const formDataPayload = new FormData();
-      formDataPayload.append('profile_picture', file);
+      formDataPayload.append('resume', file);
 
-      const response = await fetch('/api/candidate/profile/photo', {
+      const response = await fetch('/api/candidate/resume', {
         method: 'POST',
         body: formDataPayload,
         credentials: 'include',
@@ -229,33 +378,19 @@ export default function CandidateProfilePage() {
 
       const result = await response.json();
       if (!response.ok || !result.success) {
-        setSaveError(result.message || 'Unable to upload profile picture.');
+        setSaveError(result.message || 'Unable to upload resume.');
         return;
       }
 
-      setFormData((current) => ({
-        ...current,
-        profilePicture: result.data.profile_picture,
-      }));
-      alert('Profile picture uploaded successfully!');
+      setResumeUrl(result.data.resume_url);
+      setResumeFileName(file.name);
+      setResumeFile(file);
+      alert('Resume uploaded successfully!');
     } catch (error) {
-      setSaveError('Unable to upload profile picture. Please try again.');
-      console.error('Profile picture upload error:', error);
+      setSaveError('Unable to upload resume. Please try again.');
+      console.error('Resume upload error:', error);
     } finally {
       setIsUploading(false);
-    }
-  };
-
-  const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setIsUploading(true);
-      // Simulate upload
-      setTimeout(() => {
-        setResumeFile(file);
-        setIsUploading(false);
-        alert('Resume uploaded successfully!');
-      }, 1500);
     }
   };
 
@@ -521,7 +656,10 @@ export default function CandidateProfilePage() {
                       </p>
                     </div>
                     {isEditing && (
-                      <button className="text-red-500 hover:text-red-700">
+                      <button
+                        onClick={() => handleRemoveExperience(exp.id)}
+                        className="text-red-500 hover:text-red-700"
+                      >
                         <Trash2 className="h-4 w-4" />
                       </button>
                     )}
@@ -539,9 +677,9 @@ export default function CandidateProfilePage() {
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Profile Picture</h2>
             <div className="flex flex-col items-center space-y-4">
-              {formData.profilePicture ? (
+              {profilePicturePreview || formData.profilePicture ? (
                 <img
-                  src={formData.profilePicture}
+                  src={profilePicturePreview || formData.profilePicture}
                   alt="Profile"
                   className="w-28 h-28 rounded-full object-cover border border-gray-200 dark:border-gray-700"
                 />
@@ -551,16 +689,26 @@ export default function CandidateProfilePage() {
                 </div>
               )}
               {isEditing && (
-                <label className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium cursor-pointer hover:bg-blue-700 transition">
-                  {isUploading ? 'Uploading...' : 'Upload Photo'}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleProfilePictureChange}
-                    className="hidden"
-                    disabled={isUploading}
-                  />
-                </label>
+                <div className="flex flex-col items-center gap-2">
+                  <label className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium cursor-pointer hover:bg-blue-700 transition">
+                    Upload Photo
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleProfilePictureChange}
+                      className="hidden"
+                    />
+                  </label>
+                  {pendingProfilePictureFile && (
+                    <button
+                      type="button"
+                      onClick={cancelProfilePicturePreview}
+                      className="text-sm text-gray-500 hover:text-gray-700"
+                    >
+                      Cancel preview
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           </div>
@@ -571,8 +719,13 @@ export default function CandidateProfilePage() {
             <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 text-center">
               <Upload className="h-10 w-10 text-gray-400 mx-auto mb-3" />
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                {resumeFile ? resumeFile.name : 'Upload your resume (PDF, DOC, DOCX)'}
+                {resumeFileName || resumeUrl ? resumeFileName || resumeUrl.split('/').pop() : 'Upload your resume (PDF, DOC, DOCX)'}
               </p>
+              {resumeUrl && !resumeFileName && (
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Saved resume: <a href={resumeUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">View</a>
+                </p>
+              )}
               {isEditing && (
                 <label className="inline-block mt-3 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium cursor-pointer hover:bg-blue-700 transition">
                   {isUploading ? 'Uploading...' : 'Choose File'}

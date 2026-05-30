@@ -53,6 +53,44 @@ export default function CandidateDashboard() {
   
   const [recommendedJobs, setRecommendedJobs] = useState<RecommendedJob[]>([]);
 
+  useEffect(() => {
+    const loadDashboard = async () => {
+      try {
+        const response = await fetch('/api/applications?limit=3', { cache: 'no-store' });
+        const result = await response.json();
+
+        if (!result.success) {
+          return;
+        }
+
+        const summary = result.data.status_summary || {};
+        const total = result.data.pagination?.total ?? 0;
+        const active = (summary.pending ?? 0) + (summary.reviewed ?? 0) + (summary.shortlisted ?? 0);
+
+        setStats({
+          totalApplications: total,
+          activeApplications: active,
+          viewedApplications: 0,
+          profileViews: 0,
+        });
+
+        setRecentApplications(
+          result.data.applications.map((app: any) => ({
+            id: app.id,
+            jobTitle: app.job_title,
+            company: app.company_name,
+            appliedDate: app.applied_date,
+            status: app.status,
+          }))
+        );
+      } catch (error) {
+        console.error('Failed to load dashboard data:', error);
+      }
+    };
+
+    loadDashboard();
+  }, []);
+
   const getStatusColor = (status: string) => {
     switch(status) {
       case 'pending': return 'bg-yellow-100 text-yellow-800';

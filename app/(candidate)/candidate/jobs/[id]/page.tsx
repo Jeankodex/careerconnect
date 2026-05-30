@@ -62,7 +62,37 @@ export default function JobDetailsPage() {
       try {
         const response = await fetch(`/api/jobs/${jobId}`, { cache: 'no-store' });
         const result = await response.json();
-        setJob(result.success ? result.data : null);
+
+        if (!result.success || !result.data) {
+          setJob(null);
+          return;
+        }
+
+        const apiJob = result.data.job || result.data;
+        setJob({
+          id: apiJob.id,
+          title: apiJob.title,
+          company: apiJob.company_name || 'Unknown Company',
+          companyLogo: apiJob.company_logo || (apiJob.company_name ? apiJob.company_name.charAt(0).toUpperCase() : '?'),
+          companyDescription: apiJob.company_description || '',
+          companySize: apiJob.company_size || '',
+          companyIndustry: apiJob.company_industry || '',
+          companyWebsite: apiJob.company_website || '',
+          location: apiJob.location || 'Remote',
+          salary: `${apiJob.salary_currency || '$'}${apiJob.salary_min ?? ''}${apiJob.salary_max ? ` - ${apiJob.salary_currency || '$'}${apiJob.salary_max}` : ''}`,
+          jobType: apiJob.job_type || 'Full-time',
+          experienceLevel: apiJob.experience_level || 'Not specified',
+          postedDate: apiJob.posted_date || '',
+          deadline: apiJob.closing_date || '',
+          description: apiJob.description || '',
+          requirements: Array.isArray(apiJob.requirements) ? apiJob.requirements : [],
+          responsibilities: Array.isArray(apiJob.responsibilities) ? apiJob.responsibilities : [],
+          benefits: Array.isArray(apiJob.benefits) ? apiJob.benefits : [],
+          skills: Array.isArray(apiJob.skills) ? apiJob.skills.map((item: any) => (typeof item === 'string' ? item : item.name || item.category || '')).filter(Boolean) : [],
+          applicants: apiJob.applications_count ?? 0,
+          isSaved: false,
+          hasApplied: result.data.has_applied ?? false,
+        });
       } catch {
         setJob(null);
       } finally {
@@ -349,10 +379,36 @@ function ApplyModal({ job, onClose, onApplied }: { job: JobDetails; onClose: () 
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!resume) return;
+
     setIsSubmitting(true);
-    
-    setIsSubmitting(false);
-    onApplied();
+
+    try {
+      const formData = new FormData();
+      formData.append('resume', resume);
+      formData.append('cover_letter', coverLetter);
+      formData.append('use_saved_resume', 'false');
+
+      const response = await fetch(`/api/jobs/${job.id}/apply`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      const result = await response.json();
+
+      if (!result.success) {
+        alert(result.message || 'Unable to submit application.');
+        return;
+      }
+
+      onApplied();
+      alert('Application submitted successfully.');
+    } catch (error) {
+      console.error('Application error:', error);
+      alert('Unable to submit your application. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (

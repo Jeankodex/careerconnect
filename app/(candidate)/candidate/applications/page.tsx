@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { 
   FileText, 
@@ -17,6 +17,7 @@ import {
 
 interface Application {
   id: number;
+  jobId: number;
   jobTitle: string;
   company: string;
   companyLogo: string;
@@ -28,8 +29,52 @@ interface Application {
 
 export default function ApplicationsPage() {
   const [filter, setFilter] = useState<string>('all');
-  
-  const applications: Application[] = [];
+  const [applications, setApplications] = useState<Application[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const loadApplications = async () => {
+      try {
+        setIsLoading(true);
+
+        const params = new URLSearchParams();
+        if (filter !== 'all') params.append('status', filter);
+        params.append('limit', '50');
+
+        const url = `/api/applications?${params.toString()}`;
+        const response = await fetch(url, { cache: 'no-store' });
+        const result = await response.json();
+
+        if (!result.success) {
+          setApplications([]);
+          return;
+        }
+
+        setApplications(result.data.applications.map((app: any) => ({
+          id: app.id,
+          jobId: app.job_id,
+          jobTitle: app.job_title,
+          company: app.company_name,
+          companyLogo: app.company_logo || (app.company_name ? app.company_name.charAt(0).toUpperCase() : '?'),
+          appliedDate: app.applied_date,
+          status: app.status,
+          statusMessage: app.recruiter_notes || `Your application is currently ${app.status}.`,
+          nextStep: app.status === 'shortlisted'
+            ? 'Check your email for interview details.'
+            : app.status === 'hired'
+            ? 'Congrats! Your application was successful.'
+            : undefined,
+        })));
+      } catch (error) {
+        console.error('Failed to load applications:', error);
+        setApplications([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadApplications();
+  }, [filter]);
 
   const getStatusConfig = (status: Application['status']) => {
     const configs = {
@@ -52,6 +97,17 @@ export default function ApplicationsPage() {
     shortlisted: applications.filter(a => a.status === 'shortlisted').length,
     hired: applications.filter(a => a.status === 'hired').length,
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[300px]">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-gray-600 dark:text-gray-400">Loading applications...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -161,7 +217,7 @@ export default function ApplicationsPage() {
                     {app.companyLogo}
                   </div>
                   <div>
-                    <Link href={`/candidate/jobs/${app.id}`}>
+                    <Link href={`/candidate/jobs/${app.jobId}`}>
                       <h3 className="text-lg font-semibold text-gray-900 dark:text-white hover:text-blue-600 transition">
                         {app.jobTitle}
                       </h3>

@@ -38,9 +38,26 @@ export async function POST(
     
     const candidateId = payload.userId;
     
-    // Step 2: Get request body
-    const body = await request.json();
-    let { cover_letter, use_saved_resume } = body;
+    // Step 2: Get request body safely for JSON or multipart/form-data
+    let cover_letter: string | null = null;
+    let use_saved_resume = false;
+    let resumeFile: File | null = null;
+
+    const contentType = request.headers.get('content-type') || '';
+    if (contentType.includes('multipart/form-data')) {
+      const formData = await request.formData();
+      cover_letter = formData.get('cover_letter')?.toString() || null;
+      const useSavedValue = formData.get('use_saved_resume');
+      use_saved_resume = useSavedValue === 'true' || useSavedValue === '1';
+      const fileEntry = formData.get('resume');
+      if (fileEntry instanceof File) {
+        resumeFile = fileEntry;
+      }
+    } else {
+      const body = await request.json();
+      cover_letter = body.cover_letter || null;
+      use_saved_resume = Boolean(body.use_saved_resume);
+    }
     
     // Step 3: Check if already applied
     const existingApplication = await query(
@@ -94,7 +111,7 @@ export async function POST(
         [candidateId]
       );
       resumeUrl = profileResult.rows[0]?.resume_url;
-      
+
       if (!resumeUrl) {
         return NextResponse.json(
           { success: false, message: 'No saved resume found. Please upload a resume.' },
@@ -102,39 +119,37 @@ export async function POST(
         );
       }
     } else {
-      // Handle new resume upload
-      const formData = await request.formData();
-      const file = formData.get('resume') as File;
-      
-      if (!file) {
+      if (!resumeFile) {
         return NextResponse.json(
           { success: false, message: 'Resume file is required' },
           { status: 400 }
         );
       }
-      
-      // Validate file
-      const allowedTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
-      if (!allowedTypes.includes(file.type)) {
+
+      const allowedTypes = [
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      ];
+      if (!allowedTypes.includes(resumeFile.type)) {
         return NextResponse.json(
           { success: false, message: 'Invalid file type. Please upload PDF, DOC, or DOCX.' },
           { status: 400 }
         );
       }
-      
-      // Save file
+
       const timestamp = Date.now();
-      const safeFileName = `${candidateId}_${timestamp}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+      const safeFileName = `${candidateId}_${timestamp}_${resumeFile.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
       const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'applications');
       await mkdir(uploadDir, { recursive: true });
-      
+
       const filePath = path.join(uploadDir, safeFileName);
-      const fileBuffer = Buffer.from(await file.arrayBuffer());
+      const fileBuffer = Buffer.from(await resumeFile.arrayBuffer());
       await writeFile(filePath, fileBuffer);
-      
+
       resumeUrl = `/uploads/applications/${safeFileName}`;
     }
-    
+
     // Step 6: Create application using transaction
     const application = await transaction(async (client) => {
       // Insert application

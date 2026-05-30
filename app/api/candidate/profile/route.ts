@@ -1,7 +1,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyToken } from '@/lib/auth/jwt';
-import { query } from '@/lib/db/postgres';
+import { query, transaction } from '@/lib/db/postgres';
 
 export async function GET(request: NextRequest) {
   try {
@@ -202,49 +202,109 @@ export async function PUT(request: NextRequest) {
     const safeWorkExperience = normalizeWorkExperience(work_experience);
     const workExperienceJson = safeWorkExperience !== null ? JSON.stringify(safeWorkExperience) : null;
 
+    const normalizeSkillLevel = (value: unknown) => {
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        return Math.min(Math.max(Math.round(value), 1), 5);
+      }
+      if (typeof value === 'string') {
+        const normalized = value.toLowerCase();
+        if (normalized.includes('beginner')) return 1;
+        if (normalized.includes('intermediate')) return 2;
+        if (normalized.includes('advanced')) return 3;
+        if (normalized.includes('expert')) return 4;
+      }
+      return 2;
+    };
+
+    const normalizeSkillName = (value: unknown) => {
+      if (typeof value === 'string') {
+        return value.trim();
+      }
+      if (typeof value === 'object' && value !== null && 'name' in value) {
+        return String((value as any).name).trim();
+      }
+      return '';
+    };
+
+    const skillItems = Array.isArray(body.skills)
+      ? body.skills.map((skill: any) => ({
+          name: normalizeSkillName(skill),
+          proficiency_level: normalizeSkillLevel(skill.level ?? skill.proficiency_level),
+        })).filter((skill) => skill.name.length > 0)
+      : null;
+
     const userId = payload.userId;
     
-    // Step 3: Check if profile exists
-    const existingProfile = await query(
-      'SELECT id FROM candidate_profiles WHERE user_id = $1',
-      [userId]
-    );
-    
-    // Step 4: Update or insert profile
-    if (existingProfile.rows.length > 0) {
-      // Update existing profile
-      await query(
-        `UPDATE candidate_profiles 
-         SET first_name = $1, last_name = $2, phone = $3, location = $4, 
-             headline = $5, summary = $6, years_experience = $7, 
-             current_job_title = $8, current_company = $9, 
-             linkedin_url = $10, github_url = $11, portfolio_url = $12,
-             education = $13, work_experience = $14,
-             updated_at = CURRENT_TIMESTAMP
-         WHERE user_id = $15`,
-        [
-          first_name, last_name, phone, location, headline, summary, 
-          safeYearsExperience, current_job_title, current_company,
-          linkedin_url, github_url, portfolio_url, education, workExperienceJson, userId
-        ]
+    await transaction(async (client) => {
+      // Step 3: Check if profile exists and insert or update
+      const existingProfile = await client.query(
+        'SELECT id FROM candidate_profiles WHERE user_id = $1',
+        [userId]
       );
-    } else {
-      // Create new profile
-      await query(
-        `INSERT INTO candidate_profiles 
-         (user_id, first_name, last_name, phone, location, headline, summary, 
-          years_experience, current_job_title, current_company, 
-          linkedin_url, github_url, portfolio_url, education, work_experience)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
-        [
-          userId, first_name, last_name, phone, location, headline, summary,
-          safeYearsExperience, current_job_title, current_company,
-          linkedin_url, github_url, portfolio_url, education, workExperienceJson
-        ]
-      );
-    }
-    
-    // Step 5: Fetch updated profile
+
+      if (existingProfile.rows.length > 0) {
+        await client.query(
+          `UPDATE candidate_profiles 
+           SET first_name = $1, last_name = $2, phone = $3, location = $4, 
+               headline = $5, summary = $6, years_experience = $7, 
+               current_job_title = $8, current_company = $9, 
+               linkedin_url = $10, github_url = $11, portfolio_url = $12,
+               education = $13, work_experience = $14,
+               updated_at = CURRENT_TIMESTAMP
+           WHERE user_id = $15`,
+          [
+            first_name, last_name, phone, location, headline, summary, 
+            safeYearsExperience, current_job_title, current_company,
+            linkedin_url, github_url, portfolio_url, education, workExperienceJson, userId
+          ]
+        );
+      } else {
+        await client.query(
+          `INSERT INTO candidate_profiles 
+           (user_id, first_name, last_name, phone, location, headline, summary, 
+            years_experience, current_job_title, current_company, 
+            linkedin_url, github_url, portfolio_url, education, work_experience)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+          [
+            userId, first_name, last_name, phone, location, headline, summary,
+            safeYearsExperience, current_job_title, current_company,
+            linkedin_url, github_url, portfolio_url, education, workExperienceJson
+          ]
+        );
+      }
+
+      if (skillItems !== null) {
+        await client.query('DELETE FROM candidate_skills WHERE candidate_id = $1', [userId]);
+
+        for (const skill of skillItems) {
+          const insertSkill = await client.query(
+            `INSERT INTO skills (name) VALUES ($1)
+             ON CONFLICT (name) DO NOTHING
+             RETURNING id`,
+            [skill.name]
+          );
+
+          let skillId = insertSkill.rows[0]?.id;
+          if (!skillId) {
+            const existingSkill = await client.query(
+              'SELECT id FROM skills WHERE name = $1',
+              [skill.name]
+            );
+            skillId = existingSkill.rows[0]?.id;
+          }
+
+          if (!skillId) continue;
+
+          await client.query(
+            `INSERT INTO candidate_skills (candidate_id, skill_id, proficiency_level)
+             VALUES ($1, $2, $3)`,
+            [userId, skillId, skill.proficiency_level]
+          );
+        }
+      }
+    });
+
+    // Step 5: Fetch updated profile and skills
     const updatedProfile = await query(
       `SELECT first_name, last_name, phone, location, headline, summary, 
               resume_url, profile_picture, years_experience, current_job_title, 
@@ -252,11 +312,23 @@ export async function PUT(request: NextRequest) {
        FROM candidate_profiles WHERE user_id = $1`,
       [userId]
     );
-    
+
+    const updatedSkills = await query(
+      `SELECT s.id, s.name, s.category, cs.proficiency_level
+       FROM candidate_skills cs
+       JOIN skills s ON cs.skill_id = s.id
+       WHERE cs.candidate_id = $1
+       ORDER BY s.category, s.name`,
+      [userId]
+    );
+
     return NextResponse.json({
       success: true,
       message: 'Profile updated successfully',
-      data: updatedProfile.rows[0],
+      data: {
+        profile: updatedProfile.rows[0],
+        skills: updatedSkills.rows,
+      },
     });
     
   } catch (error) {

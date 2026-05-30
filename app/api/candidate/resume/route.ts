@@ -71,12 +71,25 @@ export async function POST(request: NextRequest) {
     const fileUrl = `/uploads/resumes/${safeFileName}`;
     
     // Step 9: Update database with resume URL
-    await query(
-      `UPDATE candidate_profiles 
-       SET resume_url = $1, updated_at = CURRENT_TIMESTAMP
-       WHERE user_id = $2`,
-      [fileUrl, payload.userId]
+    const profileResult = await query(
+      'SELECT id FROM candidate_profiles WHERE user_id = $1',
+      [payload.userId]
     );
+
+    if (profileResult.rows.length > 0) {
+      await query(
+        `UPDATE candidate_profiles 
+         SET resume_url = $1, updated_at = CURRENT_TIMESTAMP
+         WHERE user_id = $2`,
+        [fileUrl, payload.userId]
+      );
+    } else {
+      await query(
+        `INSERT INTO candidate_profiles (user_id, resume_url)
+         VALUES ($1, $2)`,
+        [payload.userId, fileUrl]
+      );
+    }
     
     return NextResponse.json({
       success: true,
