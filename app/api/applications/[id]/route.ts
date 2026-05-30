@@ -149,3 +149,144 @@ export async function GET(
     );
   }
 }
+
+// PUT - Update application status (Recruiter only)
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const applicationId = parseInt(params.id);
+    
+    if (isNaN(applicationId)) {
+      return NextResponse.json(
+        { success: false, message: 'Invalid application ID' },
+        { status: 400 }
+      );
+    }
+    
+    // Step 1: Verify authentication
+    const token = request.cookies.get('auth_token')?.value;
+    if (!token) {
+      return NextResponse.json(
+        { success: false, message: 'Not authenticated' },
+        { status: 401 }
+      );
+    }
+    
+    const payload = verifyToken(token);
+    if (!payload || payload.role !== 'recruiter') {
+      return NextResponse.json(
+        { success: false, message: 'Access denied' },
+        { status: 403 }
+      );
+    }
+    
+    // Step 2: Get application and verify job ownership
+    const applicationCheck = await query(
+      `SELECT a.id, a.job_id, a.candidate_id, a.status, j.recruiter_id, j.title
+       FROM applications a
+       JOIN jobs j ON a.job_id = j.id
+       WHERE a.id = $1`,
+      [applicationId]
+    );
+    
+    if (applicationCheck.rows.length === 0) {
+      return NextResponse.json(
+        { success: false, message: 'Application not found' },
+        { status: 404 }
+      );
+    }
+    
+    const application = applicationCheck.rows[0];
+    
+    if (application.recruiter_id !== payload.userId) {
+      return NextResponse.json(
+        { success: false, message: 'You can only update applications for your own jobs' },
+        { status: 403 }
+      );
+    }
+    
+    // Step 3: Get request body
+    const body = await request.json();
+    const { status, notes, rating, interview_date, interview_type } = body;
+    
+    const validStatuses = ['pending', 'reviewed', 'shortlisted', 'interview', 'rejected', 'hired'];
+    if (status && !validStatuses.includes(status)) {
+      return NextResponse.json(
+        { success: false, message: 'Invalid status value' },
+        { status: 400 }
+      );
+    }
+    
+    // Step 4: Update application using transaction
+    const result = await transaction(async (client) => {
+      // Update application
+      const updateResult = await client.query(
+        `UPDATE applications 
+         SET status = COALESCE($1, status),
+             notes = COALESCE($2, notes),
+             rating = COALESCE($3, rating),
+             interview_date = COALESCE($4, interview_date),
+             interview_type = COALESCE($5, interview_type),
+             reviewed_at = CASE WHEN $1 IN ('reviewed', 'shortlisted', 'interview', 'rejected', 'hired') 
+                           THEN CURRENT_TIMESTAMP ELSE reviewed_at END,
+             status_updated_at = CURRENT_TIMESTAMP,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = $6
+         RETURNING *`,
+        [status, notes, rating, interview_date, interview_type, applicationId]
+      );
+      
+      // Create notification for candidate
+      let notificationTitle = '';
+      let notificationMessage = '';
+      
+      switch (status) {
+        case 'reviewed':
+          notificationTitle = 'Application Reviewed';
+          notificationMessage = `Your application for "${application.title}" has been reviewed.`;
+          break;
+        case 'shortlisted':
+          notificationTitle = 'Congratulations! You\'ve been Shortlisted';
+          notificationMessage = `You have been shortlisted for "${application.title}". We will contact you soon.`;
+          break;
+        case 'interview':
+          notificationTitle = 'Interview Scheduled';
+          notificationMessage = `An interview has been scheduled for "${application.title}" on ${new Date(interview_date).toLocaleDateString()}.`;
+          break;
+        case 'rejected':
+          notificationTitle = 'Application Update';
+          notificationMessage = `Thank you for applying for "${application.title}". Unfortunately, we have moved forward with other candidates.`;
+          break;
+        case 'hired':
+          notificationTitle = 'Offer Extended! 🎉';
+          notificationMessage = `Congratulations! You have been selected for "${application.title}". Our team will reach out with next steps.`;
+          break;
+      }
+      
+      if (notificationTitle) {
+        await client.query(
+          `INSERT INTO notifications (user_id, title, message, type, related_entity_type, related_entity_id)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [application.candidate_id, notificationTitle, notificationMessage, 'application', 'job', application.job_id]
+        );
+      }
+      
+      return updateResult.rows[0];
+    });
+    
+    return NextResponse.json({
+      success: true,
+      message: 'Application status updated successfully',
+      data: result,
+    });
+    
+  } catch (error) {
+    console.error('Update application error:', error);
+    return NextResponse.json(
+      { success: false, message: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}

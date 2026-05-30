@@ -71,13 +71,39 @@ export default function CreateJobPage() {
 
   const handleSubmit = async (status: 'draft' | 'published') => {
     setIsSubmitting(true);
-    setFormData({ ...formData, status });
-    
-    setIsSubmitting(false);
-    if (status === 'published') {
-      router.push('/recruiter/jobs');
-    } else {
-      alert('Job saved as draft!');
+    try {
+      const payload = {
+        ...formData,
+        status,
+        is_remote: false,
+        salary_currency: 'USD',
+        work_type: 'onsite',
+      };
+
+      const response = await fetch('/api/jobs', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result?.message || 'Failed to post job');
+      }
+
+      if (status === 'published') {
+        router.push('/recruiter/jobs');
+      } else {
+        alert('Job saved as draft!');
+      }
+    } catch (error) {
+      console.error('Job submit error:', error);
+      alert(error instanceof Error ? error.message : 'Unable to submit job.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 

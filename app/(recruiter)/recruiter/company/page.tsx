@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { 
   Building, 
   Mail, 
@@ -30,28 +30,79 @@ interface CompanyData {
   culture: string;
   logo: string | null;
   coverImage: string | null;
+  social_linkedin?: string;
+  social_twitter?: string;
+  social_instagram?: string;
 }
+
+const initialCompanyData: CompanyData = {
+  name: '',
+  email: '',
+  phone: '',
+  website: '',
+  location: '',
+  founded: '',
+  size: '',
+  industry: '',
+  description: '',
+  mission: '',
+  culture: '',
+  logo: null,
+  coverImage: null,
+  social_linkedin: '',
+  social_twitter: '',
+  social_instagram: '',
+};
 
 export default function CompanyProfilePage() {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [company, setCompany] = useState<CompanyData>({
-    name: '',
-    email: '',
-    phone: '',
-    website: '',
-    location: '',
-    founded: '',
-    size: '',
-    industry: '',
-    description: '',
-    mission: '',
-    culture: '',
-    logo: null,
-    coverImage: null,
-  });
+  const [company, setCompany] = useState<CompanyData>(initialCompanyData);
+  const [formData, setFormData] = useState<CompanyData>(initialCompanyData);
+  const [error, setError] = useState<string | null>(null);
 
-  const [formData, setFormData] = useState(company);
+  useEffect(() => {
+    async function loadCompany() {
+      try {
+        const res = await fetch('/api/companies', { credentials: 'same-origin' });
+        const json = await res.json();
+
+        if (!res.ok) {
+          throw new Error(json?.message || 'Failed to load company profile');
+        }
+
+        if (json?.data?.company) {
+          const companyData = json.data.company;
+          const normalized: CompanyData = {
+            name: companyData.name || '',
+            email: companyData.email || '',
+            phone: companyData.phone || '',
+            website: companyData.website || '',
+            location: companyData.headquarters || '',
+            founded: companyData.founded_year ? String(companyData.founded_year) : '',
+            size: companyData.size || '',
+            industry: companyData.industry || '',
+            description: companyData.description || '',
+            mission: '',
+            culture: '',
+            logo: companyData.logo_url || null,
+            coverImage: companyData.cover_image_url || null,
+            social_linkedin: companyData.social_linkedin || '',
+            social_twitter: companyData.social_twitter || '',
+            social_instagram: companyData.social_instagram || '',
+          };
+
+          setCompany(normalized);
+          setFormData(normalized);
+        }
+      } catch (err) {
+        console.error('Load company profile error:', err);
+        setError('Unable to load company profile.');
+      }
+    }
+
+    loadCompany();
+  }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -59,10 +110,69 @@ export default function CompanyProfilePage() {
 
   const handleSave = async () => {
     setIsSaving(true);
-    setCompany(formData);
-    setIsEditing(false);
-    setIsSaving(false);
-    alert('Company profile updated successfully!');
+    setError(null);
+
+    try {
+      const response = await fetch('/api/companies', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          name: formData.name,
+          description: formData.description,
+          website: formData.website,
+          logo_url: formData.logo,
+          cover_image_url: formData.coverImage,
+          industry: formData.industry,
+          size: formData.size,
+          founded_year: formData.founded ? Number(formData.founded) : null,
+          headquarters: formData.location,
+          phone: formData.phone,
+          email: formData.email,
+          social_linkedin: formData.social_linkedin || '',
+          social_twitter: formData.social_twitter || '',
+          social_instagram: formData.social_instagram || '',
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result?.message || 'Failed to save company profile');
+      }
+
+      const saved = result.data;
+      const normalized: CompanyData = {
+        name: saved.name || '',
+        email: saved.email || '',
+        phone: saved.phone || '',
+        website: saved.website || '',
+        location: saved.headquarters || '',
+        founded: saved.founded_year ? String(saved.founded_year) : '',
+        size: saved.size || '',
+        industry: saved.industry || '',
+        description: saved.description || '',
+        mission: formData.mission,
+        culture: formData.culture,
+        logo: saved.logo_url || formData.logo,
+        coverImage: saved.cover_image_url || formData.coverImage,
+        social_linkedin: saved.social_linkedin || formData.social_linkedin || '',
+        social_twitter: saved.social_twitter || formData.social_twitter || '',
+        social_instagram: saved.social_instagram || formData.social_instagram || '',
+      };
+
+      setCompany(normalized);
+      setFormData(normalized);
+      setIsEditing(false);
+      alert('Company profile updated successfully!');
+    } catch (err) {
+      console.error('Save company profile error:', err);
+      setError('Unable to save company profile. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -90,6 +200,9 @@ export default function CompanyProfilePage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Company Profile</h1>
           <p className="text-gray-600 dark:text-gray-400 mt-1">Manage your company information and branding</p>
+          {error && (
+            <p className="mt-3 text-sm text-red-600 dark:text-red-400">{error}</p>
+          )}
         </div>
         <button
           onClick={() => isEditing ? handleSave() : setIsEditing(true)}
@@ -154,17 +267,54 @@ export default function CompanyProfilePage() {
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
             <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-4">Social Media</h3>
             <div className="space-y-3">
-              <div className="flex items-center space-x-2 text-gray-600 dark:text-gray-400">
-                <Globe className="h-4 w-4" />
-                <span className="text-sm">{company.website}</span>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Website</label>
+                <div className="relative">
+                  <Globe className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                  <input
+                    name="website"
+                    value={formData.website}
+                    onChange={handleInputChange}
+                    disabled={!isEditing}
+                    className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 dark:disabled:bg-gray-700"
+                  />
+                </div>
               </div>
-              <div className="flex items-center space-x-2 text-gray-600 dark:text-gray-400">
-                <Link className="h-4 w-4" />
-                <span className="text-sm">linkedin.com/company/techcorp</span>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">LinkedIn</label>
+                <input
+                  name="social_linkedin"
+                  value={formData.social_linkedin}
+                  onChange={handleInputChange}
+                  disabled={!isEditing}
+                  placeholder="https://linkedin.com/company/your-company"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 dark:disabled:bg-gray-700"
+                />
               </div>
-              <div className="flex items-center space-x-2 text-gray-600 dark:text-gray-400">
-                <Share2 className="h-4 w-4" />
-                <span className="text-sm">twitter.com/techcorp</span>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Twitter</label>
+                <input
+                  name="social_twitter"
+                  value={formData.social_twitter}
+                  onChange={handleInputChange}
+                  disabled={!isEditing}
+                  placeholder="https://twitter.com/your-company"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 dark:disabled:bg-gray-700"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Instagram</label>
+                <input
+                  name="social_instagram"
+                  value={formData.social_instagram}
+                  onChange={handleInputChange}
+                  disabled={!isEditing}
+                  placeholder="https://instagram.com/your-company"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 dark:disabled:bg-gray-700"
+                />
               </div>
             </div>
           </div>

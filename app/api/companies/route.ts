@@ -1,123 +1,186 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { query } from '@/lib/db/postgres';
 import { verifyToken } from '@/lib/auth/jwt';
+import { query, transaction } from '@/lib/db/postgres';
 
+// GET - Fetch recruiter's company
 export async function GET(request: NextRequest) {
   try {
-    // STEP 1: Get query parameters
-    const { searchParams } = new URL(request.url);
-    const search = searchParams.get('search');
-    const industry = searchParams.get('industry');
-    const limit = parseInt(searchParams.get('limit') || '20');
-    const offset = parseInt(searchParams.get('offset') || '0');
-    
-    // STEP 2: Check if user is authenticated (for showing their own company)
+    // Step 1: Verify authentication
     const token = request.cookies.get('auth_token')?.value;
-    let userId = null;
-    let userRole = null;
     
-    if (token) {
-      const payload = verifyToken(token);
-      if (payload) {
-        userId = payload.userId;
-        userRole = payload.role;
-      }
-    }
-    
-    // STEP 3: Build the query
-    let sql = `
-      SELECT 
-        c.id, 
-        c.name, 
-        c.logo_url, 
-        c.industry, 
-        c.headquarters as location,
-        c.is_verified,
-        c.website,
-        COUNT(DISTINCT j.id) as job_count
-      FROM companies c
-      LEFT JOIN jobs j ON j.company_id = c.id AND j.status = 'active'
-      WHERE 1=1
-    `;
-    const params: any[] = [];
-    let paramIndex = 1;
-    
-    if (search) {
-      sql += ` AND c.name ILIKE $${paramIndex}`;
-      params.push(`%${search}%`);
-      paramIndex++;
-    }
-    
-    if (industry) {
-      sql += ` AND c.industry = $${paramIndex}`;
-      params.push(industry);
-      paramIndex++;
-    }
-    
-    sql += ` GROUP BY c.id ORDER BY c.name ASC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
-    params.push(limit, offset);
-    
-    // STEP 4: Execute main query
-    const result = await query(sql, params);
-    
-    // STEP 5: Get total count for pagination
-    let countSql = `SELECT COUNT(DISTINCT c.id) as total FROM companies c WHERE 1=1`;
-    const countParams: any[] = [];
-    let countIndex = 1;
-    
-    if (search) {
-      countSql += ` AND c.name ILIKE $${countIndex}`;
-      countParams.push(`%${search}%`);
-      countIndex++;
-    }
-    
-    if (industry) {
-      countSql += ` AND c.industry = $${countIndex}`;
-      countParams.push(industry);
-      countIndex++;
-    }
-    
-    const countResult = await query(countSql, countParams);
-    const total = parseInt(countResult.rows[0]?.total || '0');
-    
-    // STEP 6: Get unique industries for filter dropdown
-    const industriesResult = await query(
-      `SELECT DISTINCT industry FROM companies WHERE industry IS NOT NULL ORDER BY industry`
-    );
-    const industries = industriesResult.rows.map(row => row.industry);
-    
-    // STEP 7: If user is a recruiter, get their company info
-    let userCompany = null;
-    if (userId && userRole === 'recruiter') {
-      const companyResult = await query(
-        `SELECT id, name, logo_url, industry, headquarters, description, website, is_verified
-         FROM companies 
-         WHERE user_id = $1`,
-        [userId]
+    if (!token) {
+      return NextResponse.json(
+        { success: false, message: 'Not authenticated' },
+        { status: 401 }
       );
-      if (companyResult.rows[0]) {
-        userCompany = companyResult.rows[0];
-      }
     }
     
-    // STEP 8: Return response
+    const payload = verifyToken(token);
+    if (!payload || payload.role !== 'recruiter') {
+      return NextResponse.json(
+        { success: false, message: 'Access denied. Recruiters only.' },
+        { status: 403 }
+      );
+    }
+    
+    const userId = payload.userId;
+    
+    // Step 2: Fetch company for this recruiter
+    const result = await query(
+      `SELECT 
+        id, name, description, website, logo_url, cover_image_url,
+        industry, size, founded_year, headquarters, phone, email,
+        social_linkedin, social_twitter, social_instagram, is_verified,
+        created_at, updated_at
+       FROM companies 
+       WHERE user_id = $1`,
+      [userId]
+    );
+    
+    const company = result.rows[0] || null;
+    
+    // Step 3: If company exists, get job stats
+    let jobStats = null;
+    if (company) {
+      const statsResult = await query(
+        `SELECT 
+          COUNT(*) as total_jobs,
+          COUNT(CASE WHEN status = 'active' THEN 1 END) as active_jobs,
+          SUM(applications_count) as total_applications,
+          SUM(views_count) as total_views
+         FROM jobs 
+         WHERE company_id = $1`,
+        [company.id]
+      );
+      jobStats = statsResult.rows[0];
+    }
+    
     return NextResponse.json({
       success: true,
       data: {
-        companies: result.rows,
-        industries: industries,
-        user_company: userCompany,
-        pagination: {
-          total,
-          limit,
-          offset,
-          has_more: offset + result.rows.length < total,
-        },
+        company,
+        stats: jobStats,
+        has_company: !!company,
       },
     });
     
   } catch (error) {
-    console.error('Get companies error:', error);
+    console.error('Get company error:', error);
+    return NextResponse.json(
+      { success: false, message: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}
+
+// PUT - Create or update company
+export async function PUT(request: NextRequest) {
+  try {
+    // Step 1: Verify authentication
+    const token = request.cookies.get('auth_token')?.value;
+    
+    if (!token) {
+      return NextResponse.json(
+        { success: false, message: 'Not authenticated' },
+        { status: 401 }
+      );
+    }
+    
+    const payload = verifyToken(token);
+    if (!payload || payload.role !== 'recruiter') {
+      return NextResponse.json(
+        { success: false, message: 'Access denied. Recruiters only.' },
+        { status: 403 }
+      );
+    }
+    
+    const userId = payload.userId;
+    const body = await request.json();
+    
+    // Step 2: Validate required fields
+    const {
+      name,
+      description,
+      website,
+      logo_url,
+      cover_image_url,
+      industry,
+      size,
+      founded_year,
+      headquarters,
+      phone,
+      email,
+      social_linkedin,
+      social_twitter,
+      social_instagram,
+    } = body;
+    
+    if (!name) {
+      return NextResponse.json(
+        { success: false, message: 'Company name is required' },
+        { status: 400 }
+      );
+    }
+    
+    // Step 3: Check if company already exists
+    const existingCompany = await query(
+      'SELECT id FROM companies WHERE user_id = $1',
+      [userId]
+    );
+    
+    let company;
+    
+    if (existingCompany.rows.length > 0) {
+      // UPDATE existing company
+      const result = await query(
+        `UPDATE companies 
+         SET name = $1, description = $2, website = $3, logo_url = $4, 
+             cover_image_url = $5, industry = $6, size = $7, founded_year = $8,
+             headquarters = $9, phone = $10, email = $11, 
+             social_linkedin = $12, social_twitter = $13, social_instagram = $14,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE user_id = $15
+         RETURNING *`,
+        [
+          name, description, website, logo_url, cover_image_url,
+          industry, size, founded_year, headquarters, phone, email,
+          social_linkedin, social_twitter, social_instagram, userId
+        ]
+      );
+      company = result.rows[0];
+      
+      return NextResponse.json({
+        success: true,
+        message: 'Company updated successfully',
+        data: company,
+      });
+      
+    } else {
+      // CREATE new company
+      const result = await query(
+        `INSERT INTO companies 
+         (user_id, name, description, website, logo_url, cover_image_url,
+          industry, size, founded_year, headquarters, phone, email,
+          social_linkedin, social_twitter, social_instagram, is_verified)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+         RETURNING *`,
+        [
+          userId, name, description, website, logo_url, cover_image_url,
+          industry, size, founded_year, headquarters, phone, email,
+          social_linkedin, social_twitter, social_instagram, false
+        ]
+      );
+      company = result.rows[0];
+      
+      return NextResponse.json({
+        success: true,
+        message: 'Company created successfully',
+        data: company,
+      }, { status: 201 });
+    }
+    
+  } catch (error) {
+    console.error('Save company error:', error);
     return NextResponse.json(
       { success: false, message: 'Internal server error' },
       { status: 500 }

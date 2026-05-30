@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyToken } from '@/lib/auth/jwt';
-import { query } from '@/lib/db/postgres';
+import { query, transaction } from '@/lib/db/postgres';
 
 export async function GET(request: NextRequest) {
   try {
@@ -173,6 +173,135 @@ export async function GET(request: NextRequest) {
     
   } catch (error) {
     console.error('Get jobs error:', error);
+    return NextResponse.json(
+      { success: false, message: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}
+
+// POST - Create a new job (Recruiter only)
+export async function POST(request: NextRequest) {
+  try {
+    // Step 1: Verify authentication
+    const token = request.cookies.get('auth_token')?.value;
+    
+    if (!token) {
+      return NextResponse.json(
+        { success: false, message: 'Not authenticated' },
+        { status: 401 }
+      );
+    }
+    
+    const payload = verifyToken(token);
+    if (!payload || payload.role !== 'recruiter') {
+      return NextResponse.json(
+        { success: false, message: 'Access denied. Recruiters only.' },
+        { status: 403 }
+      );
+    }
+    
+    const userId = payload.userId;
+    const body = await request.json();
+    
+    // Step 2: Validate required fields
+    const {
+      title,
+      description,
+      requirements,
+      responsibilities,
+      benefits,
+      location,
+      is_remote,
+      salary_min,
+      salary_max,
+      salary_currency,
+      job_type,
+      work_type,
+      experience_level,
+      closing_date,
+      status,
+      skills,
+    } = body;
+    
+    if (!title || !description || !location) {
+      return NextResponse.json(
+        { success: false, message: 'Title, description, and location are required' },
+        { status: 400 }
+      );
+    }
+    
+    // Step 3: Check if recruiter has a company
+    const companyResult = await query(
+      'SELECT id FROM companies WHERE user_id = $1',
+      [userId]
+    );
+    
+    if (companyResult.rows.length === 0) {
+      return NextResponse.json(
+        { success: false, message: 'Please create a company profile first' },
+        { status: 400 }
+      );
+    }
+    
+    const companyId = companyResult.rows[0].id;
+    
+    // Step 4: Create job using transaction
+    const result = await transaction(async (client) => {
+      // Insert job
+      const jobResult = await client.query(
+        `INSERT INTO jobs 
+         (company_id, recruiter_id, title, description, requirements, 
+          responsibilities, benefits, location, is_remote, salary_min, 
+          salary_max, salary_currency, job_type, work_type, experience_level, 
+          closing_date, status, posted_date)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, CURRENT_TIMESTAMP)
+         RETURNING *`,
+        [
+          companyId,
+          userId,
+          title,
+          description,
+          Array.isArray(requirements) ? requirements.filter(Boolean).join('\n') : requirements || null,
+          Array.isArray(responsibilities) ? responsibilities.filter(Boolean).join('\n') : responsibilities || null,
+          Array.isArray(benefits) ? benefits.filter(Boolean).join('\n') : benefits || null,
+          location,
+          is_remote || false,
+          salary_min || null,
+          salary_max || null,
+          salary_currency || 'USD',
+          job_type || 'full-time',
+          work_type || 'onsite',
+          experience_level || 'mid',
+          closing_date || null,
+          status === 'draft' ? 'draft' : 'active'
+        ]
+      );
+      
+      const job = jobResult.rows[0];
+      
+      // Insert skills if provided
+      if (skills && skills.length > 0) {
+        for (const skill of skills) {
+          await client.query(
+            `INSERT INTO job_skills (job_id, skill_id, is_required)
+             VALUES ($1, $2, $3)`,
+            [job.id, skill.id, skill.is_required !== false]
+          );
+        }
+      }
+      
+      return job;
+    });
+    
+    return NextResponse.json({
+      success: true,
+      message: 'Job posted successfully',
+      data: result,
+    }, { status: 201 });
+    
+  } catch (error) {
+    console.error('Create job error:', error);
     return NextResponse.json(
       { success: false, message: 'Internal server error' },
       { status: 500 }

@@ -4,14 +4,22 @@ export type ExperienceLevel = 'entry' | 'junior' | 'mid' | 'senior' | 'lead';
 
 export interface Company {
   id: number;
-  recruiter_id: number;
+  user_id: number;
   name: string;
-  description: string;
-  website: string;
-  logo_url: string;
-  industry: string;
-  size: string;
-  location: string;
+  description?: string;
+  website?: string;
+  logo_url?: string;
+  cover_image_url?: string;
+  industry?: string;
+  size?: string;
+  founded_year?: number;
+  headquarters?: string;
+  phone?: string;
+  email?: string;
+  social_linkedin?: string;
+  social_twitter?: string;
+  social_instagram?: string;
+  is_verified?: boolean;
   created_at: Date;
   updated_at: Date;
 }

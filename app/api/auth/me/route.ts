@@ -69,7 +69,7 @@ export async function GET(request: NextRequest) {
       // Also fetch company info if recruiter has one
       if (profile) {
         const companyResult = await query(
-          `SELECT id, name, logo_url, industry, location
+          `SELECT id, name, logo_url, industry, headquarters AS location
            FROM companies 
            WHERE user_id = $1`,
           [user.id]

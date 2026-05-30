@@ -46,14 +46,22 @@ CREATE TABLE IF NOT EXISTS recruiter_profiles (
 -- Create companies table
 CREATE TABLE IF NOT EXISTS companies (
     id SERIAL PRIMARY KEY,
-    recruiter_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
     description TEXT,
     website VARCHAR(255),
     logo_url TEXT,
+    cover_image_url TEXT,
     industry VARCHAR(100),
     size VARCHAR(50),
-    location VARCHAR(255),
+    founded_year INTEGER,
+    headquarters VARCHAR(255),
+    phone VARCHAR(20),
+    email VARCHAR(255),
+    social_linkedin VARCHAR(255),
+    social_twitter VARCHAR(255),
+    social_instagram VARCHAR(255),
+    is_verified BOOLEAN DEFAULT false,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
