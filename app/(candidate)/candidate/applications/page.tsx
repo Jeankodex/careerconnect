@@ -21,6 +21,7 @@ interface Application {
   jobTitle: string;
   company: string;
   companyLogo: string;
+  companyLogoSrc?: string | null;
   appliedDate: string;
   status: 'pending' | 'reviewed' | 'shortlisted' | 'rejected' | 'hired';
   statusMessage: string;
@@ -50,13 +51,16 @@ export default function ApplicationsPage() {
           return;
         }
 
-        setApplications(result.data.applications.map((app: any) => ({
-          id: app.id,
-          jobId: app.job_id,
-          jobTitle: app.job_title,
-          company: app.company_name,
-          companyLogo: app.company_logo || (app.company_name ? app.company_name.charAt(0).toUpperCase() : '?'),
-          appliedDate: app.applied_date,
+        setApplications(result.data.applications.map((app: any) => {
+          const logoSrc = normalizeLogoSource(app.company_logo);
+          return {
+            id: app.id,
+            jobId: app.job_id,
+            jobTitle: app.job_title,
+            company: app.company_name,
+            companyLogo: app.company_name ? app.company_name.charAt(0).toUpperCase() : '?',
+            companyLogoSrc: logoSrc,
+            appliedDate: app.applied_date,
           status: app.status,
           statusMessage: app.recruiter_notes || `Your application is currently ${app.status}.`,
           nextStep: app.status === 'shortlisted'
@@ -64,7 +68,8 @@ export default function ApplicationsPage() {
             : app.status === 'hired'
             ? 'Congrats! Your application was successful.'
             : undefined,
-        })));
+          };
+          }));
       } catch (error) {
         console.error('Failed to load applications:', error);
         setApplications([]);
@@ -75,6 +80,17 @@ export default function ApplicationsPage() {
 
     loadApplications();
   }, [filter]);
+
+function normalizeLogoSource(value?: unknown) {
+  if (typeof value !== 'string' || value.length === 0) return null;
+  if (value.startsWith('data:image/') || value.startsWith('http') || value.startsWith('/')) {
+    return value;
+  }
+  if (/^[A-Za-z0-9+/=]+$/.test(value) && value.length > 100) {
+    return `data:image/png;base64,${value}`;
+  }
+  return null;
+}
 
   const getStatusConfig = (status: Application['status']) => {
     const configs = {
@@ -213,8 +229,12 @@ export default function ApplicationsPage() {
             <div key={app.id} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm hover:shadow-md transition p-6">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="flex items-start space-x-4">
-                  <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-500 rounded-lg flex items-center justify-center text-white font-bold">
-                    {app.companyLogo}
+                  <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-500 rounded-lg flex items-center justify-center text-white font-bold overflow-hidden">
+                    {app.companyLogoSrc ? (
+                      <img src={app.companyLogoSrc} alt={app.company} className="w-full h-full object-cover" />
+                    ) : (
+                      app.companyLogo
+                    )}
                   </div>
                   <div>
                     <Link href={`/candidate/jobs/${app.jobId}`}>

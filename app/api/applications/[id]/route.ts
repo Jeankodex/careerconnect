@@ -4,10 +4,11 @@ import { query } from '@/lib/db/postgres';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const applicationId = parseInt(params.id);
+    const { id } = await params;
+    const applicationId = parseInt(id);
     
     if (isNaN(applicationId)) {
       return NextResponse.json(
@@ -153,10 +154,11 @@ export async function GET(
 // PUT - Update application status (Recruiter only)
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const applicationId = parseInt(params.id);
+    const { id } = await params;
+    const applicationId = parseInt(id);
     
     if (isNaN(applicationId)) {
       return NextResponse.json(

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
 import { 
@@ -65,6 +65,33 @@ export default function RecruiterDashboard() {
       default: return 'bg-gray-100 text-gray-800';
     }
   };
+
+  useEffect(() => {
+    async function loadRecruiterJobs() {
+      try {
+        const response = await fetch('/api/jobs?mine=true', { cache: 'no-store' });
+        const result = await response.json();
+
+        if (!result.success || !Array.isArray(result.data.jobs)) {
+          return;
+        }
+
+        setJobs(result.data.jobs.map((job: any) => ({
+          id: job.id,
+          title: job.title,
+          views: job.views_count ?? job.views ?? 0,
+          applications: job.applications_count ?? 0,
+          shortlisted: job.shortlisted ?? 0,
+          status: job.status,
+          postedDate: job.posted_date ?? job.postedDate ?? '',
+        })));
+      } catch (error) {
+        console.error('Failed to load recruiter jobs', error);
+      }
+    }
+
+    loadRecruiterJobs();
+  }, []);
 
   return (
     <div className="space-y-6">

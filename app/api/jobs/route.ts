@@ -13,6 +13,7 @@ export async function GET(request: NextRequest) {
     const salaryMin = searchParams.get('salary_min');
     const salaryMax = searchParams.get('salary_max');
     const companyId = searchParams.get('company_id');
+    const mine = searchParams.get('mine') === 'true';
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '10');
     const offset = (page - 1) * limit;
@@ -48,6 +49,7 @@ export async function GET(request: NextRequest) {
         j.closing_date,
         j.views_count,
         j.applications_count,
+        (SELECT COUNT(*) FROM applications a2 WHERE a2.job_id = j.id AND a2.status = 'shortlisted') as shortlisted,
         j.is_featured,
         c.id as company_id,
         c.name as company_name,
@@ -113,6 +115,12 @@ export async function GET(request: NextRequest) {
       paramIndex++;
     }
     
+    if (mine && userId && userRole === 'recruiter') {
+      sql += ` AND j.recruiter_id = $${paramIndex}`;
+      params.push(userId);
+      paramIndex++;
+    }
+
     if (companyId) {
       sql += ` AND j.company_id = $${paramIndex}`;
       params.push(parseInt(companyId));
@@ -151,6 +159,12 @@ export async function GET(request: NextRequest) {
     if (jobType) {
       countSql += ` AND j.job_type = $${countIndex}`;
       countParams.push(jobType);
+      countIndex++;
+    }
+
+    if (mine && userRole === 'recruiter' && userId) {
+      countSql += ` AND j.recruiter_id = $${countIndex}`;
+      countParams.push(userId);
       countIndex++;
     }
     

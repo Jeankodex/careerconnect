@@ -5,10 +5,11 @@ import { query, transaction } from '@/lib/db/postgres';
 // GET - Get single job details (public)
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const jobId = parseInt(params.id);
+    const { id } = await params;
+    const jobId = parseInt(id);
     
     if (isNaN(jobId)) {
       return NextResponse.json(
@@ -108,10 +109,11 @@ export async function GET(
 // PUT - Update job (Recruiter only, must be owner)
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const jobId = parseInt(params.id);
+    const { id } = await params;
+    const jobId = parseInt(id);
     
     // Verify authentication
     const token = request.cookies.get('auth_token')?.value;
@@ -215,10 +217,11 @@ export async function PUT(
 // DELETE - Delete job (Recruiter only, must be owner)
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const jobId = parseInt(params.id);
+    const { id } = await params;
+    const jobId = parseInt(id);
     
     // Verify authentication
     const token = request.cookies.get('auth_token')?.value;

@@ -27,6 +27,7 @@ interface JobDetails {
   title: string;
   company: string;
   companyLogo: string;
+  companyLogoSrc?: string | null;
   companyDescription: string;
   companySize: string;
   companyIndustry: string;
@@ -47,10 +48,21 @@ interface JobDetails {
   hasApplied: boolean;
 }
 
-export default function JobDetailsPage() {
+function normalizeLogoSource(value?: unknown): string | null {
+  if (typeof value !== 'string' || value.length === 0) return null;
+  if (value.startsWith('data:image/') || value.startsWith('http') || value.startsWith('/')) {
+    return value;
+  }
+  if (/^[A-Za-z0-9+/=]+$/.test(value) && value.length > 100) {
+    return `data:image/png;base64,${value}`;
+  }
+  return null;
+}
+
+function JobDetailsPage() {
   const params = useParams();
   const router = useRouter();
-  const jobId = params.id;
+  const jobId = Array.isArray(params.id) ? params.id[0] : params.id;
   
   const [job, setJob] = useState<JobDetails | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -59,6 +71,12 @@ export default function JobDetailsPage() {
 
   useEffect(() => {
     async function loadJob() {
+      if (!jobId) {
+        setJob(null);
+        setIsLoading(false);
+        return;
+      }
+
       try {
         const response = await fetch(`/api/jobs/${jobId}`, { cache: 'no-store' });
         const result = await response.json();
@@ -69,11 +87,13 @@ export default function JobDetailsPage() {
         }
 
         const apiJob = result.data.job || result.data;
+        const companyLogoSrc = normalizeLogoSource(apiJob.company_logo);
         setJob({
           id: apiJob.id,
           title: apiJob.title,
           company: apiJob.company_name || 'Unknown Company',
-          companyLogo: apiJob.company_logo || (apiJob.company_name ? apiJob.company_name.charAt(0).toUpperCase() : '?'),
+          companyLogo: apiJob.company_name ? apiJob.company_name.charAt(0).toUpperCase() : '?',
+          companyLogoSrc,
           companyDescription: apiJob.company_description || '',
           companySize: apiJob.company_size || '',
           companyIndustry: apiJob.company_industry || '',
@@ -155,8 +175,12 @@ export default function JobDetailsPage() {
         <div className="p-6 border-b dark:border-gray-700">
           <div className="flex items-start justify-between">
             <div className="flex items-start space-x-4">
-              <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-500 rounded-xl flex items-center justify-center text-white font-bold text-xl">
-                {job.companyLogo}
+              <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-500 rounded-xl flex items-center justify-center text-white font-bold text-xl overflow-hidden">
+                {job.companyLogoSrc ? (
+                  <img src={job.companyLogoSrc} alt={job.company} className="w-full h-full object-cover" />
+                ) : (
+                  job.companyLogo
+                )}
               </div>
               <div>
                 <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{job.title}</h1>
@@ -370,6 +394,8 @@ export default function JobDetailsPage() {
     </div>
   );
 }
+
+export default JobDetailsPage;
 
 // Apply Modal Component
 function ApplyModal({ job, onClose, onApplied }: { job: JobDetails; onClose: () => void; onApplied: () => void }) {

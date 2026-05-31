@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { 
   Briefcase, 
@@ -36,6 +36,34 @@ export default function ManageJobsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [showMenuFor, setShowMenuFor] = useState<number | null>(null);
+
+  useEffect(() => {
+    async function loadRecruiterJobs() {
+      try {
+        const response = await fetch('/api/jobs?mine=true', { cache: 'no-store' });
+        const result = await response.json();
+
+        if (!result.success || !Array.isArray(result.data.jobs)) {
+          return;
+        }
+
+        setJobs(result.data.jobs.map((job: any) => ({
+          id: job.id,
+          title: job.title,
+          location: job.location,
+          jobType: job.job_type || job.jobType || 'Full-time',
+          postedDate: job.posted_date ?? job.postedDate ?? '',
+          views: job.views_count ?? job.views ?? 0,
+          applications: job.applications_count ?? job.applications ?? 0,
+          status: job.status,
+        })));
+      } catch (error) {
+        console.error('Failed to load recruiter jobs', error);
+      }
+    }
+
+    loadRecruiterJobs();
+  }, []);
 
   const getStatusConfig = (status: string) => {
     const configs = {

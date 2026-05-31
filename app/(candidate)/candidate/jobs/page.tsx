@@ -19,6 +19,7 @@ interface Job {
   title: string;
   company: string;
   companyLogo: string;
+  companyLogoSrc?: string | null;
   location: string;
   salary: string;
   jobType: string;
@@ -44,6 +45,17 @@ function formatSalary(min?: number, max?: number, currency?: string) {
 function formatDate(value?: string) {
   if (!value) return '';
   return new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+function normalizeLogoSource(value?: unknown) {
+  if (typeof value !== 'string' || value.length === 0) return null;
+  if (value.startsWith('data:image/') || value.startsWith('http') || value.startsWith('/')) {
+    return value;
+  }
+  if (/^[A-Za-z0-9+/=]+$/.test(value) && value.length > 100) {
+    return `data:image/png;base64,${value}`;
+  }
+  return null;
 }
 
 export default function JobSearchPage() {
@@ -76,12 +88,15 @@ export default function JobSearchPage() {
         return;
       }
 
-      const mappedJobs = result.data.jobs.map((job: any) => ({
-        id: job.id,
-        title: job.title,
-        company: job.company_name || 'Unknown',
-        companyLogo: job.company_logo || (job.company_name ? job.company_name.charAt(0).toUpperCase() : '?'),
-        location: job.location || 'Remote',
+      const mappedJobs = result.data.jobs.map((job: any) => {
+        const logoSrc = normalizeLogoSource(job.company_logo);
+        return {
+          id: job.id,
+          title: job.title,
+          company: job.company_name || 'Unknown',
+          companyLogo: logoSrc ? (job.company_name ? job.company_name.charAt(0).toUpperCase() : '?') : (job.company_name ? job.company_name.charAt(0).toUpperCase() : '?'),
+          companyLogoSrc: logoSrc,
+          location: job.location || 'Remote',
         salary: formatSalary(job.salary_min, job.salary_max, job.salary_currency),
         jobType: job.job_type || 'Full-time',
         postedDate: formatDate(job.posted_date),
@@ -90,7 +105,8 @@ export default function JobSearchPage() {
           ? job.skills.map((item: any) => (typeof item === 'string' ? item : item.name || item.category || '')).filter(Boolean)
           : [],
         isSaved: false,
-      }));
+      };
+    });
 
       setJobs(mappedJobs);
     } catch (error) {
@@ -219,8 +235,12 @@ export default function JobSearchPage() {
               <div key={job.id} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm hover:shadow-md transition p-6">
                 <div className="flex items-start justify-between">
                   <div className="flex items-start space-x-4">
-                    <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-500 rounded-lg flex items-center justify-center text-white font-bold">
-                      {job.companyLogo}
+                    <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-500 rounded-lg flex items-center justify-center text-white font-bold overflow-hidden">
+                      {job.companyLogoSrc ? (
+                        <img src={job.companyLogoSrc} alt={job.company} className="w-full h-full object-cover" />
+                      ) : (
+                        job.companyLogo
+                      )}
                     </div>
                     <div className="flex-1">
                       <Link href={`/candidate/jobs/${job.id}`}>
