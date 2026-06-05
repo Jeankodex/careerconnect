@@ -76,7 +76,13 @@ export async function GET(request: NextRequest) {
       paramIndex++;
     }
     
-    sql += ` WHERE j.status = 'active' AND j.posted_date <= CURRENT_TIMESTAMP`;
+    if (mine && userId && userRole === 'recruiter') {
+      sql += ` WHERE j.recruiter_id = $${paramIndex}`;
+      params.push(userId);
+      paramIndex++;
+    } else {
+      sql += ` WHERE j.status = 'active' AND j.posted_date <= CURRENT_TIMESTAMP`;
+    }
     
     // Add filters
     if (search) {
@@ -115,12 +121,6 @@ export async function GET(request: NextRequest) {
       paramIndex++;
     }
     
-    if (mine && userId && userRole === 'recruiter') {
-      sql += ` AND j.recruiter_id = $${paramIndex}`;
-      params.push(userId);
-      paramIndex++;
-    }
-
     if (companyId) {
       sql += ` AND j.company_id = $${paramIndex}`;
       params.push(parseInt(companyId));
@@ -137,12 +137,19 @@ export async function GET(request: NextRequest) {
     // Step 6: Get total count for pagination
     let countSql = `
       SELECT COUNT(*) as total 
-      FROM jobs j 
-      WHERE j.status = 'active' AND j.posted_date <= CURRENT_TIMESTAMP
+      FROM jobs j
     `;
     
     const countParams: any[] = [];
     let countIndex = 1;
+    
+    if (mine && userRole === 'recruiter' && userId) {
+      countSql += ` WHERE j.recruiter_id = $${countIndex}`;
+      countParams.push(userId);
+      countIndex++;
+    } else {
+      countSql += ` WHERE j.status = 'active' AND j.posted_date <= CURRENT_TIMESTAMP`;
+    }
     
     if (search) {
       countSql += ` AND (j.title ILIKE $${countIndex} OR j.description ILIKE $${countIndex})`;
@@ -162,12 +169,6 @@ export async function GET(request: NextRequest) {
       countIndex++;
     }
 
-    if (mine && userRole === 'recruiter' && userId) {
-      countSql += ` AND j.recruiter_id = $${countIndex}`;
-      countParams.push(userId);
-      countIndex++;
-    }
-    
     const countResult = await query(countSql, countParams);
     const total = parseInt(countResult.rows[0]?.total || '0');
     
@@ -228,19 +229,52 @@ export async function POST(request: NextRequest) {
       location,
       is_remote,
       salary_min,
+      salaryMin,
       salary_max,
+      salaryMax,
       salary_currency,
       job_type,
+      jobType,
       work_type,
       experience_level,
+      experienceLevel,
       closing_date,
+      closingDate,
       status,
       skills,
     } = body;
+    const normalizedSalaryMin = salary_min ?? salaryMin;
+    const normalizedSalaryMax = salary_max ?? salaryMax;
+    const normalizedClosingDate = closing_date ?? closingDate;
+    const normalizedJobType = job_type ?? jobType;
+    const normalizedExperienceLevel = experience_level ?? experienceLevel;
+    const parsedSalaryMin = Number(normalizedSalaryMin);
+    const parsedSalaryMax = Number(normalizedSalaryMax);
     
     if (!title || !description || !location) {
       return NextResponse.json(
         { success: false, message: 'Title, description, and location are required' },
+        { status: 400 }
+      );
+    }
+
+    if (
+      normalizedSalaryMin === undefined ||
+      normalizedSalaryMin === '' ||
+      normalizedSalaryMax === undefined ||
+      normalizedSalaryMax === '' ||
+      normalizedClosingDate === undefined ||
+      normalizedClosingDate === ''
+    ) {
+      return NextResponse.json(
+        { success: false, message: 'Salary range and closing date are required' },
+        { status: 400 }
+      );
+    }
+
+    if (!Number.isFinite(parsedSalaryMin) || !Number.isFinite(parsedSalaryMax) || parsedSalaryMin < 0 || parsedSalaryMax < 0 || parsedSalaryMax < parsedSalaryMin) {
+      return NextResponse.json(
+        { success: false, message: 'Enter a valid salary range' },
         { status: 400 }
       );
     }
@@ -281,13 +315,13 @@ export async function POST(request: NextRequest) {
           Array.isArray(benefits) ? benefits.filter(Boolean).join('\n') : benefits || null,
           location,
           is_remote || false,
-          salary_min || null,
-          salary_max || null,
+          parsedSalaryMin,
+          parsedSalaryMax,
           salary_currency || 'USD',
-          job_type || 'full-time',
+          normalizedJobType || 'full-time',
           work_type || 'onsite',
-          experience_level || 'mid',
-          closing_date || null,
+          normalizedExperienceLevel || 'mid',
+          normalizedClosingDate,
           status === 'draft' ? 'draft' : 'active'
         ]
       );

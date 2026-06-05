@@ -12,6 +12,9 @@ import {
   ChevronDown,
   Star,
   Clock,
+  Eye,
+  CheckCircle,
+  XCircle,
 } from 'lucide-react';
 
 interface Job {
@@ -69,6 +72,7 @@ export default function JobSearchPage() {
   const locations = ['Remote', 'New York, NY', 'San Francisco, CA', 'Austin, TX', 'Chicago, IL'];
   const jobTypes = ['Full-time', 'Part-time', 'Contract', 'Remote', 'Internship'];
 
+  const [appliedMap, setAppliedMap] = useState<Record<number, { id: number; status: string }>>({});
   const loadJobs = async () => {
     try {
       setIsLoading(true);
@@ -113,6 +117,22 @@ export default function JobSearchPage() {
       console.error('Failed to load jobs:', error);
       setJobs([]);
     } finally {
+      // After loading jobs, fetch candidate applications to determine application status per job
+      try {
+        const appResp = await fetch(`/api/applications?limit=1000`, { cache: 'no-store' });
+        const appResult = await appResp.json();
+        if (appResult.success && Array.isArray(appResult.data.applications)) {
+          const map: Record<number, { id: number; status: string }> = {};
+          appResult.data.applications.forEach((a: any) => {
+            if (a.job_id) {
+              map[a.job_id] = { id: a.id, status: a.status };
+            }
+          });
+          setAppliedMap(map);
+        }
+      } catch (e) {
+        console.error('Failed to load applications for jobs list', e);
+      }
       setIsLoading(false);
     }
   };
@@ -283,12 +303,39 @@ export default function JobSearchPage() {
                     >
                       <Star className={`h-5 w-5 ${job.isSaved ? 'fill-yellow-400 text-yellow-400' : 'text-gray-400'}`} />
                     </button>
-                    <Link
-                      href={`/candidate/jobs/${job.id}`}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition whitespace-nowrap"
-                    >
-                      Apply Now
-                    </Link>
+                    {appliedMap[job.id] ? (() => {
+                      const st = appliedMap[job.id].status;
+                      const configs: Record<string, { color: string; label: string; Icon: any }> = {
+                        pending: { color: 'bg-yellow-100 text-yellow-800', label: 'Pending', Icon: Clock },
+                        reviewed: { color: 'bg-blue-100 text-blue-800', label: 'Under Review', Icon: Eye },
+                        shortlisted: { color: 'bg-green-100 text-green-800', label: 'Shortlisted', Icon: CheckCircle },
+                        rejected: { color: 'bg-red-100 text-red-800', label: 'Not Selected', Icon: XCircle },
+                        hired: { color: 'bg-purple-100 text-purple-800', label: 'Hired', Icon: Briefcase },
+                      };
+                      const cfg = configs[st] || { color: 'bg-gray-100 text-gray-800', label: st, Icon: Clock };
+                      const StatusIcon = cfg.Icon;
+                      return (
+                        <>
+                          <span className={`inline-flex items-center space-x-1 px-3 py-1 rounded-full text-xs font-medium ${cfg.color}`}>
+                            <StatusIcon className="w-3 h-3" />
+                            <span>{cfg.label}</span>
+                          </span>
+                          <Link
+                            href={`/candidate/applications`}
+                            className="mt-2 px-4 py-2 bg-gray-200 text-gray-800 rounded-lg text-sm font-medium hover:bg-gray-300 transition whitespace-nowrap"
+                          >
+                            View Application
+                          </Link>
+                        </>
+                      );
+                    })() : (
+                      <Link
+                        href={`/candidate/jobs/${job.id}`}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition whitespace-nowrap"
+                      >
+                        Apply Now
+                      </Link>
+                    )}
                   </div>
                 </div>
               </div>

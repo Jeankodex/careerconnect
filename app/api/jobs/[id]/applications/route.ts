@@ -80,8 +80,8 @@ export async function GET(
         u.id as candidate_id,
         u.email as candidate_email,
         u.created_at as candidate_joined,
-        cp.first_name,
-        cp.last_name,
+        COALESCE(cp.first_name, '') as first_name,
+        COALESCE(cp.last_name, '') as last_name,
         cp.phone,
         cp.location,
         cp.headline,
@@ -97,16 +97,16 @@ export async function GET(
          WHERE cs.candidate_id = u.id) as skills
       FROM applications a
       JOIN users u ON a.candidate_id = u.id
-      JOIN candidate_profiles cp ON u.id = cp.user_id
+      LEFT JOIN candidate_profiles cp ON u.id = cp.user_id
       WHERE a.job_id = $1
     `;
     
-    const params: any[] = [jobId];
+    const queryParams: any[] = [jobId];
     let paramIndex = 2;
     
     if (statusFilter) {
       sql += ` AND a.status = $${paramIndex}`;
-      params.push(statusFilter);
+      queryParams.push(statusFilter);
       paramIndex++;
     }
     
@@ -122,10 +122,10 @@ export async function GET(
       a.applied_date ASC
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
     
-    params.push(limit, offset);
+    queryParams.push(limit, offset);
     
     // Step 5: Execute query
-    const result = await query(sql, params);
+    const result = await query(sql, queryParams);
     
     // Step 6: Get status counts for pipeline view
     const statusCounts = await query(

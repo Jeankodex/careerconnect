@@ -27,7 +27,7 @@ interface JobPosting {
   postedDate: string;
   views: number;
   applications: number;
-  status: 'active' | 'closed' | 'draft';
+  status: 'active' | 'closed' | 'draft' | 'expired';
 }
 
 export default function ManageJobsPage() {
@@ -40,7 +40,7 @@ export default function ManageJobsPage() {
   useEffect(() => {
     async function loadRecruiterJobs() {
       try {
-        const response = await fetch('/api/jobs?mine=true', { cache: 'no-store' });
+        const response = await fetch('/api/jobs?mine=true&limit=100', { cache: 'no-store' });
         const result = await response.json();
 
         if (!result.success || !Array.isArray(result.data.jobs)) {
@@ -70,6 +70,7 @@ export default function ManageJobsPage() {
       active: { color: 'bg-green-100 text-green-800', icon: CheckCircle, label: 'Active' },
       closed: { color: 'bg-gray-100 text-gray-800', icon: XCircle, label: 'Closed' },
       draft: { color: 'bg-yellow-100 text-yellow-800', icon: AlertCircle, label: 'Draft' },
+      expired: { color: 'bg-red-100 text-red-800', icon: XCircle, label: 'Expired' },
     };
     return configs[status as keyof typeof configs];
   };
@@ -176,6 +177,7 @@ export default function ManageJobsPage() {
             <option value="active">Active</option>
             <option value="closed">Closed</option>
             <option value="draft">Draft</option>
+            <option value="expired">Expired</option>
           </select>
         </div>
       </div>

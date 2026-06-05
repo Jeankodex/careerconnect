@@ -22,16 +22,17 @@ interface JobMetric {
   views: number;
   applications: number;
   shortlisted: number;
-  status: 'active' | 'closed' | 'draft';
+  status: 'active' | 'closed' | 'draft' | 'expired';
   postedDate: string;
 }
 
 interface RecentApplicant {
   id: number;
+  jobId: number;
   name: string;
   jobTitle: string;
   appliedDate: string;
-  status: 'pending' | 'reviewed' | 'shortlisted' | 'rejected';
+  status: 'pending' | 'reviewed' | 'shortlisted' | 'interview' | 'rejected' | 'hired';
 }
 
 export default function RecruiterDashboard() {
@@ -52,6 +53,7 @@ export default function RecruiterDashboard() {
       case 'active': return 'bg-green-100 text-green-800';
       case 'closed': return 'bg-gray-100 text-gray-800';
       case 'draft': return 'bg-yellow-100 text-yellow-800';
+      case 'expired': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
@@ -61,36 +63,69 @@ export default function RecruiterDashboard() {
       case 'pending': return 'bg-yellow-100 text-yellow-800';
       case 'reviewed': return 'bg-blue-100 text-blue-800';
       case 'shortlisted': return 'bg-green-100 text-green-800';
+      case 'interview': return 'bg-purple-100 text-purple-800';
       case 'rejected': return 'bg-red-100 text-red-800';
+      case 'hired': return 'bg-emerald-100 text-emerald-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
 
   useEffect(() => {
-    async function loadRecruiterJobs() {
+    async function loadRecruiterData() {
       try {
-        const response = await fetch('/api/jobs?mine=true', { cache: 'no-store' });
-        const result = await response.json();
+        // Load jobs
+        const jobsResponse = await fetch('/api/jobs?mine=true&limit=100', { cache: 'no-store' });
+        const jobsResult = await jobsResponse.json();
 
-        if (!result.success || !Array.isArray(result.data.jobs)) {
-          return;
+        if (jobsResult.success && Array.isArray(jobsResult.data.jobs)) {
+          setJobs(jobsResult.data.jobs.map((job: any) => ({
+            id: job.id,
+            title: job.title,
+            views: job.views_count ?? job.views ?? 0,
+            applications: job.applications_count ?? 0,
+            shortlisted: job.shortlisted ?? 0,
+            status: job.status,
+            postedDate: job.posted_date ?? job.postedDate ?? '',
+          })));
         }
 
-        setJobs(result.data.jobs.map((job: any) => ({
-          id: job.id,
-          title: job.title,
-          views: job.views_count ?? job.views ?? 0,
-          applications: job.applications_count ?? 0,
-          shortlisted: job.shortlisted ?? 0,
-          status: job.status,
-          postedDate: job.posted_date ?? job.postedDate ?? '',
-        })));
+        // Load recent applicants - fetch from all jobs
+        const allApplicants: RecentApplicant[] = [];
+        if (jobsResult.success && Array.isArray(jobsResult.data.jobs)) {
+          for (const job of jobsResult.data.jobs.filter((job: any) => (job.applications_count ?? 0) > 0).slice(0, 5)) {
+            try {
+              const applicantsResponse = await fetch(`/api/jobs/${job.id}/applications?limit=5`, {
+                credentials: 'same-origin',
+              });
+              
+              if (applicantsResponse.ok) {
+                const applicantsResult = await applicantsResponse.json();
+                if (applicantsResult.success && Array.isArray(applicantsResult.data.applicants)) {
+                  applicantsResult.data.applicants.slice(0, 2).forEach((applicant: any) => {
+                    allApplicants.push({
+                      id: applicant.id,
+                      jobId: job.id,
+                      name: `${applicant.first_name} ${applicant.last_name}`,
+                      jobTitle: job.title,
+                      appliedDate: applicant.applied_date,
+                      status: applicant.status,
+                    });
+                  });
+                }
+              }
+            } catch (error) {
+              console.error(`Failed to load applicants for job ${job.id}:`, error);
+            }
+          }
+        }
+        
+        setApplicants(allApplicants.slice(0, 5));
       } catch (error) {
-        console.error('Failed to load recruiter jobs', error);
+        console.error('Failed to load recruiter data', error);
       }
     }
 
-    loadRecruiterJobs();
+    loadRecruiterData();
   }, []);
 
   return (
@@ -228,7 +263,7 @@ export default function RecruiterDashboard() {
                       {applicant.status}
                     </span>
                     <Link
-                      href={`/recruiter/applicants/${applicant.id}`}
+                      href={`/recruiter/jobs/${applicant.jobId}/applicants`}
                       className="text-sm text-blue-600 hover:text-blue-700"
                     >
                       Review →

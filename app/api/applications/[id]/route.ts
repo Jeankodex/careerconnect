@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyToken } from '@/lib/auth/jwt';
-import { query } from '@/lib/db/postgres';
+import { query, transaction } from '@/lib/db/postgres';
 
 export async function GET(
   request: NextRequest,
