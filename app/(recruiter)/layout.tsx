@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { useAuthStore } from '@/stores/authStore';
 import { 
   LayoutDashboard, 
   Building, 
@@ -40,6 +41,7 @@ export default function RecruiterLayout({
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const { user: authUser, profile, checkAuth, logout } = useAuthStore();
   const [notifications, setNotifications] = useState([
     { id: 1, message: 'New application for Senior Developer', read: false, time: '1 hour ago' },
     { id: 2, message: '5 candidates viewed your job posts', read: false, time: '3 hours ago' },
@@ -47,14 +49,8 @@ export default function RecruiterLayout({
     { id: 4, message: 'New message from candidate', read: false, time: '2 days ago' },
   ]);
 
-  // Demo user data (replace with actual from auth store)
-  const user = {
-    name: 'Jane Smith',
-    email: 'jane.smith@techcorp.com',
-    role: 'Recruiter',
-    company: 'Tech Corp',
-    avatar: 'JS',
-  };
+  const employerName = [profile?.first_name, profile?.last_name].filter(Boolean).join(' ').trim() || authUser?.email || 'Employer';
+  const companyName = profile?.company?.name || 'Your Company';
 
   // Load theme preference
   useEffect(() => {
@@ -64,6 +60,10 @@ export default function RecruiterLayout({
       document.documentElement.classList.add('dark');
     }
   }, []);
+
+  useEffect(() => {
+    checkAuth();
+  }, [checkAuth]);
 
   // Close sidebar on route change on mobile
   useEffect(() => {
@@ -84,12 +84,8 @@ export default function RecruiterLayout({
 
   // Handle logout
   const handleLogout = async () => {
-    try {
-      await fetch('/api/auth/logout', { method: 'POST' });
-      router.push('/login');
-    } catch (error) {
-      console.error('Logout error:', error);
-    }
+    await logout();
+    router.push('/login');
   };
 
   // Toggle sidebar collapse
@@ -127,17 +123,17 @@ export default function RecruiterLayout({
           {!isCollapsed && (
             <Link href="/recruiter/dashboard" className="flex items-center space-x-2">
               <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
-                <Building className="w-5 h-5 text-white" />
+                <Briefcase className="w-5 h-5 text-white" />
               </div>
               <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                Recruiter Hub
+                CareerConnect
               </span>
             </Link>
           )}
           {isCollapsed && (
             <Link href="/recruiter/dashboard" className="flex justify-center w-full">
               <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
-                <Building className="w-5 h-5 text-white" />
+                <Briefcase className="w-5 h-5 text-white" />
               </div>
             </Link>
           )}
@@ -149,21 +145,22 @@ export default function RecruiterLayout({
           </button>
         </div>
 
-        {/* User Profile Section */}
-        <div className={`flex items-center px-4 py-5 ${isCollapsed ? 'justify-center' : 'space-x-3'}`}>
-          <div className="flex-shrink-0">
-            <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-semibold">
-              {user.avatar}
+        {/* Company and employer identity */}
+        <div className={`px-4 py-5 border-b border-gray-100 dark:border-gray-700 ${isCollapsed ? 'flex justify-center' : 'space-y-4'}`}>
+          <div className={`flex items-center ${isCollapsed ? '' : 'space-x-3'}`} title={isCollapsed ? companyName : undefined}>
+            <div className="w-10 h-10 flex-shrink-0 rounded-lg bg-gray-100 dark:bg-gray-700 overflow-hidden flex items-center justify-center">
+              {profile?.company?.logo_url ? (
+                <img src={profile.company.logo_url} alt={`${companyName} logo`} className="w-full h-full object-cover" />
+              ) : (
+                <Building className="w-5 h-5 text-blue-600" />
+              )}
             </div>
+            {!isCollapsed && <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{companyName}</p>}
           </div>
           {!isCollapsed && (
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
-                {user.name}
-              </p>
-              <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                {user.role} at {user.company}
-              </p>
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{employerName}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{authUser?.email || ''}</p>
             </div>
           )}
         </div>
@@ -230,10 +227,10 @@ export default function RecruiterLayout({
             {/* Page Title (optional - can be dynamic) */}
             <div className="hidden lg:block">
               <h1 className="text-lg font-semibold text-gray-900 dark:text-white">
-                Welcome back, {user.name.split(' ')[0]}
+                Welcome back, {employerName.split(/\s+/)[0]}
               </h1>
               <p className="text-xs text-gray-500 dark:text-gray-400">
-                {user.company}
+                {companyName}
               </p>
             </div>
 

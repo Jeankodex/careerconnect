@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { useAuthStore } from '@/stores/authStore';
 import { 
   LayoutDashboard, 
   Briefcase, 
@@ -36,19 +37,26 @@ export default function CandidateLayout({
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const { user: authUser, profile, checkAuth, logout } = useAuthStore();
   const [notifications, setNotifications] = useState([
     { id: 1, message: 'New job matches your skills', read: false, time: '2 hours ago' },
     { id: 2, message: 'Your application was viewed', read: false, time: '1 day ago' },
     { id: 3, message: 'Application deadline approaching', read: true, time: '2 days ago' },
   ]);
 
-  // Demo user data (replace with actual from auth store)
-  const user = {
-    name: 'Victoria Nwachukwu',
-    email: 'victoria@example.com',
-    role: 'Candidate',
-    avatar: 'VN',
-  };
+  const fullName = [profile?.first_name, profile?.last_name]
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+  const name = fullName || authUser?.email || 'Candidate';
+  const firstName = profile?.first_name || name.split(/\s+/)[0];
+  const avatar = name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase();
 
   // Load theme preference
   useEffect(() => {
@@ -58,6 +66,11 @@ export default function CandidateLayout({
       document.documentElement.classList.add('dark');
     }
   }, []);
+
+  // Keep the layout's profile information in sync with the active session.
+  useEffect(() => {
+    checkAuth();
+  }, [checkAuth]);
 
   // Close sidebar on route change on mobile
   useEffect(() => {
@@ -78,12 +91,8 @@ export default function CandidateLayout({
 
   // Handle logout
   const handleLogout = async () => {
-    try {
-      await fetch('/api/auth/logout', { method: 'POST' });
-      router.push('/login');
-    } catch (error) {
-      console.error('Logout error:', error);
-    }
+    await logout();
+    router.push('/login');
   };
 
   // Toggle sidebar collapse
@@ -147,16 +156,24 @@ export default function CandidateLayout({
         <div className={`flex items-center px-4 py-5 ${isCollapsed ? 'justify-center' : 'space-x-3'}`}>
           <div className="flex-shrink-0">
             <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-semibold">
-              {user.avatar}
+              {profile?.profile_picture ? (
+                <img
+                  src={profile.profile_picture}
+                  alt={`${name}'s profile`}
+                  className="w-full h-full rounded-full object-cover"
+                />
+              ) : (
+                avatar
+              )}
             </div>
           </div>
           {!isCollapsed && (
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
-                {user.name}
+                {name}
               </p>
               <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                {user.role}
+                Candidate
               </p>
             </div>
           )}
@@ -224,7 +241,7 @@ export default function CandidateLayout({
             {/* Page Title (optional - can be dynamic) */}
             <div className="hidden lg:block">
               <h1 className="text-lg font-semibold text-gray-900 dark:text-white">
-                Welcome back, {user.name.split(' ')[0]}
+                Welcome back, {firstName}
               </h1>
             </div>
 

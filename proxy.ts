@@ -3,13 +3,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyToken } from './lib/auth/jwt';
 
-const publicPageRoutes = ['/', '/login', '/register', '/forgot-password', '/admin/login', '/debug-env'];
+const publicPageRoutes = ['/', '/login', '/register', '/forgot-password', '/admin/login'];
 const publicApiRoutes = [
   '/api/auth/login',
   '/api/auth/register',
   '/api/auth/forgot-password',
-  '/api/admin/login',
-  '/api/debug-env'
+  '/api/admin/login'
 ];
 
 const dashboardByRole: Record<string, string> = {

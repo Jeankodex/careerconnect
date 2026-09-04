@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    const { password, role, first_name, last_name } = validation.data;
+    const { password, role, first_name, last_name, company_name } = validation.data;
     const email = validation.data.email.toLowerCase();
     
     // Check if user already exists
@@ -62,6 +62,11 @@ export async function POST(request: NextRequest) {
           `INSERT INTO recruiter_profiles (user_id, first_name, last_name) 
            VALUES ($1, $2, $3)`,
           [user.id, first_name, last_name]
+        );
+        await client.query(
+          `INSERT INTO companies (user_id, name, email)
+           VALUES ($1, $2, $3)`,
+          [user.id, company_name, email]
         );
       }
       

@@ -1,13 +1,24 @@
 import { Pool, PoolClient, QueryResult } from 'pg';
 
-// Database connection pool configuration
-const pool = new Pool({
+const globalForPostgres = globalThis as typeof globalThis & {
+  postgresPool?: Pool;
+};
+
+// Reuse one pool across Next.js hot reloads so development compilation does not
+// create competing pools or drop in-flight database connections.
+const pool = globalForPostgres.postgresPool ?? new Pool({
   connectionString: process.env.DATABASE_URL,
-  max: 20,
+  max: 10,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
+  connectionTimeoutMillis: 10000,
+  keepAlive: true,
+  keepAliveInitialDelayMillis: 10000,
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
 });
+
+if (process.env.NODE_ENV !== 'production') {
+  globalForPostgres.postgresPool = pool;
+}
 
 // Event listeners for pool
 pool.on('connect', () => {

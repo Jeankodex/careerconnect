@@ -8,6 +8,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Mail, Lock, LogIn, Eye, EyeOff } from 'lucide-react';
+import { useAuthStore } from '@/stores/authStore';
 
 const loginSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
@@ -36,6 +37,7 @@ function LoginForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
+  const login = useAuthStore((state) => state.login);
   
   const {
     register,
@@ -55,23 +57,14 @@ function LoginForm() {
     setServerError(null);
   
     try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-        email: data.email,
-        password: data.password,
-        }),
-      });
-    
-    const result = await response.json();
-    
-    if (response.ok && result.success) {
+      const result = await login(data.email, data.password);
+
+    if (result.success && result.redirectUrl && result.role) {
       const redirectUrl =
-        getSafeRedirectUrl(redirect, result.data.role) || result.data.redirectUrl || '/';
+        getSafeRedirectUrl(redirect, result.role) || result.redirectUrl;
       router.push(redirectUrl);
     } else {
-      setServerError(result.message || 'Invalid email or password');
+      setServerError(result.error || 'Invalid email or password');
     }
     } catch (error) {
       setServerError('Network error. Please check your connection.');

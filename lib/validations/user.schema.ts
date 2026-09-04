@@ -7,6 +7,15 @@ export const registerSchema = z.object({
   role: z.enum(['candidate', 'recruiter']),
   first_name: z.string().min(1, 'First name is required'),
   last_name: z.string().min(1, 'Last name is required'),
+  company_name: z.string().trim().optional(),
+}).superRefine((data, ctx) => {
+  if (data.role === 'recruiter' && !data.company_name) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['company_name'],
+      message: 'Company name is required for recruiters',
+    });
+  }
 });
 
 export const loginSchema = z.object({

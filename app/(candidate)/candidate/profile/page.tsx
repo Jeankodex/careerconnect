@@ -64,6 +64,7 @@ export default function CandidateProfilePage() {
   const [profilePicturePreview, setProfilePicturePreview] = useState('');
   const [pendingProfilePictureFile, setPendingProfilePictureFile] = useState<File | null>(null);
   const [isProfileLoading, setIsProfileLoading] = useState(true);
+  const [profileCompletion, setProfileCompletion] = useState(0);
 
   const [experiences, setExperiences] = useState<Experience[]>([]);
   const [showAddExperience, setShowAddExperience] = useState(false);
@@ -81,6 +82,8 @@ export default function CandidateProfilePage() {
   const [newSkill, setNewSkill] = useState('');
   const [newSkillLevel, setNewSkillLevel] = useState<Skill['level']>('Intermediate');
   const [showAddSkill, setShowAddSkill] = useState(false);
+  const [newEducation, setNewEducation] = useState('');
+  const [showAddEducation, setShowAddEducation] = useState(false);
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
@@ -159,6 +162,7 @@ export default function CandidateProfilePage() {
 
         setResumeUrl(profileData.resume_url || '');
         setResumeFileName(profileData.resume_url ? profileData.resume_url.split('/').pop() || '' : '');
+        setProfileCompletion(result.data.profile_completion ?? 0);
       } catch (error) {
         console.error('Failed to load candidate profile:', error);
       } finally {
@@ -289,6 +293,8 @@ export default function CandidateProfilePage() {
         })));
       }
 
+      setProfileCompletion(result.data.profile_completion ?? 0);
+
       if (result.data.profile?.resume_url) {
         setResumeUrl(result.data.profile.resume_url);
         setResumeFileName(result.data.profile.resume_url.split('/').pop() || '');
@@ -318,6 +324,39 @@ export default function CandidateProfilePage() {
 
   const handleRemoveExperience = (id: number) => {
     setExperiences(experiences.filter((exp) => exp.id !== id));
+  };
+
+  const educationEntries = formData.education
+    .split('\n')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+
+  const handleAddEducation = () => {
+    const education = newEducation.trim();
+    if (!education) {
+      setSaveError('Please enter your school, program, or qualification.');
+      return;
+    }
+
+    setFormData((current) => ({
+      ...current,
+      education: [...educationEntries, education].join('\n'),
+    }));
+    setNewEducation('');
+    setShowAddEducation(false);
+    setSaveError(null);
+  };
+
+  const handleRemoveEducation = (indexToRemove: number) => {
+    setFormData((current) => ({
+      ...current,
+      education: current.education
+        .split('\n')
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+        .filter((_, index) => index !== indexToRemove)
+        .join('\n'),
+    }));
   };
 
   const handleProfilePictureChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -385,6 +424,12 @@ export default function CandidateProfilePage() {
       setResumeUrl(result.data.resume_url);
       setResumeFileName(file.name);
       setResumeFile(file);
+
+      const profileResponse = await fetch('/api/candidate/profile', { cache: 'no-store' });
+      const profileResult = await profileResponse.json();
+      if (profileResponse.ok && profileResult.success) {
+        setProfileCompletion(profileResult.data.profile_completion ?? 0);
+      }
       alert('Resume uploaded successfully!');
     } catch (error) {
       setSaveError('Unable to upload resume. Please try again.');
@@ -421,9 +466,6 @@ export default function CandidateProfilePage() {
     }));
   };
 
-  const profileStrength = (skills.length * 5) + (experiences.length * 10) + (formData.summary.length > 100 ? 20 : 10);
-  const strengthPercent = Math.min(profileStrength, 100);
-
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -448,10 +490,10 @@ export default function CandidateProfilePage() {
           <div className="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
             <div 
               className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-full h-2 transition-all duration-500"
-              style={{ width: `${strengthPercent}%` }}
+              style={{ width: `${profileCompletion}%` }}
             />
           </div>
-          <span className="text-sm font-semibold text-gray-900 dark:text-white">{strengthPercent}%</span>
+          <span className="text-sm font-semibold text-gray-900 dark:text-white">{profileCompletion}%</span>
         </div>
         <p className="text-xs text-gray-500 mt-2">Complete your profile to get better job matches</p>
       </div>
@@ -769,18 +811,42 @@ export default function CandidateProfilePage() {
             </div>
           </div>
 
-          {/* Education & Links */}
+          {/* Education */}
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Education</h2>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">School / Program</label>
-            <input
-              name="education"
-              value={formData.education}
-              onChange={handleInputChange}
-              disabled={!isEditing}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 dark:disabled:bg-gray-700"
-              placeholder="e.g., B.S. in Computer Science, University of XYZ"
-            />
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Education</h2>
+              {isEditing && (
+                <button
+                  type="button"
+                  onClick={() => setShowAddEducation(true)}
+                  className="flex items-center space-x-1 text-sm text-blue-600 hover:text-blue-700"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>Add Education</span>
+                </button>
+              )}
+            </div>
+            {educationEntries.length > 0 ? (
+              <ul className="space-y-3">
+                {educationEntries.map((entry, index) => (
+                  <li key={`${entry}-${index}`} className="flex items-start justify-between gap-3 text-sm text-gray-700 dark:text-gray-300">
+                    <span>{entry}</span>
+                    {isEditing && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveEducation(index)}
+                        aria-label={`Remove education: ${entry}`}
+                        className="shrink-0 text-red-500 hover:text-red-700"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-gray-500 dark:text-gray-400">No education added yet.</p>
+            )}
           </div>
         </div>
       </div>
@@ -931,6 +997,50 @@ export default function CandidateProfilePage() {
                   Add Experience
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAddEducation && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50">
+          <div className="bg-white dark:bg-gray-800 rounded-xl max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white">Add Education</h3>
+              <button
+                type="button"
+                onClick={() => setShowAddEducation(false)}
+                className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+              >
+                Close
+              </button>
+            </div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              School, program, or qualification
+            </label>
+            <textarea
+              value={newEducation}
+              onChange={(event) => setNewEducation(event.target.value)}
+              rows={3}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 resize-none"
+              placeholder="e.g., B.Sc. Computer Science, University of Lagos (2024)"
+              autoFocus
+            />
+            <div className="flex space-x-3 pt-4">
+              <button
+                type="button"
+                onClick={() => setShowAddEducation(false)}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleAddEducation}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                Add Education
+              </button>
             </div>
           </div>
         </div>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useAuthStore } from '@/stores/authStore';
 import { 
   Building, 
   Mail, 
@@ -55,6 +56,8 @@ const initialCompanyData: CompanyData = {
 };
 
 export default function CompanyProfilePage() {
+  const checkAuth = useAuthStore((state) => state.checkAuth);
+  const syncRecruiterCompany = useAuthStore((state) => state.syncRecruiterCompany);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [company, setCompany] = useState<CompanyData>(initialCompanyData);
@@ -165,6 +168,16 @@ export default function CompanyProfilePage() {
 
       setCompany(normalized);
       setFormData(normalized);
+      syncRecruiterCompany({
+        id: saved.id,
+        name: normalized.name,
+        logo_url: normalized.logo,
+        industry: normalized.industry || null,
+        location: normalized.location || null,
+      });
+      // The sidebar gets its company and recruiter identity from the shared
+      // auth store. Refresh it from the canonical API response after saving.
+      await checkAuth();
       setIsEditing(false);
       alert('Company profile updated successfully!');
     } catch (err) {

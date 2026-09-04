@@ -17,10 +17,13 @@ const registerSchema = z.object({
   role: z.enum(['candidate', 'recruiter']),
   firstName: z.string().min(2, 'First name must be at least 2 characters'),
   lastName: z.string().min(2, 'Last name must be at least 2 characters'),
-  companyName: z.string().optional(),
+  companyName: z.string().trim().optional(),
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Passwords don't match",
   path: ["confirmPassword"],
+}).refine((data) => data.role !== 'recruiter' || Boolean(data.companyName?.trim()), {
+  message: 'Company name is required for recruiters',
+  path: ['companyName'],
 });
 
 type RegisterFormData = z.infer<typeof registerSchema>;
@@ -252,7 +255,7 @@ export default function RegisterPage() {
           {selectedRole === 'recruiter' && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Company Name (Optional)
+                Company Name *
               </label>
               <div className="relative">
                 <Briefcase className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />

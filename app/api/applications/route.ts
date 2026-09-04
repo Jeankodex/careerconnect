@@ -101,8 +101,10 @@ export async function GET(request: NextRequest) {
       pending: 0,
       reviewed: 0,
       shortlisted: 0,
+      interview: 0,
       rejected: 0,
       hired: 0,
+      withdrawn: 0,
     };
     
     statusCounts.rows.forEach(row => {

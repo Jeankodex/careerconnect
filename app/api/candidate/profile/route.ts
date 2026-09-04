@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyToken } from '@/lib/auth/jwt';
 import { query, transaction } from '@/lib/db/postgres';
+import { calculateProfileCompletion } from '@/lib/candidate/profileCompletion';
 
 export async function GET(request: NextRequest) {
   try {
@@ -73,23 +74,8 @@ export async function GET(request: NextRequest) {
       [userId]
     );
     
-    // Step 6: Calculate profile completion percentage
-    let completionPercentage = 0;
-    let completedFields = 0;
-    let totalFields = 8; // name, phone, location, headline, summary, experience, skills, resume
-    
-    if (profile) {
-      if (profile.first_name && profile.last_name) completedFields++;
-      if (profile.phone) completedFields++;
-      if (profile.location) completedFields++;
-      if (profile.headline) completedFields++;
-      if (profile.summary) completedFields++;
-      if (profile.years_experience > 0) completedFields++;
-      if (skillsResult.rows.length > 0) completedFields++;
-      if (profile.resume_url) completedFields++;
-      
-      completionPercentage = Math.round((completedFields / totalFields) * 100);
-    }
+    // Step 6: Calculate profile completion percentage from all editable profile details.
+    const completionPercentage = calculateProfileCompletion(profile, skillsResult.rows.length);
     
     // Step 7: Return complete profile data
     return NextResponse.json({
@@ -230,7 +216,7 @@ export async function PUT(request: NextRequest) {
       ? body.skills.map((skill: any) => ({
           name: normalizeSkillName(skill),
           proficiency_level: normalizeSkillLevel(skill.level ?? skill.proficiency_level),
-        })).filter((skill) => skill.name.length > 0)
+        })).filter((skill: { name: string }) => skill.name.length > 0)
       : null;
 
     const userId = payload.userId;
@@ -322,12 +308,15 @@ export async function PUT(request: NextRequest) {
       [userId]
     );
 
+    const completionPercentage = calculateProfileCompletion(updatedProfile.rows[0] || null, updatedSkills.rows.length);
+
     return NextResponse.json({
       success: true,
       message: 'Profile updated successfully',
       data: {
         profile: updatedProfile.rows[0],
         skills: updatedSkills.rows,
+        profile_completion: completionPercentage,
       },
     });
     
